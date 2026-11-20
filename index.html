@@ -172,6 +172,18 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 .quick{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
 .chipbtn{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
 .chk{display:inline-flex;align-items:center;gap:6px;font-size:14px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+.leave{margin-top:12px;font-size:14px;display:grid;gap:6px}
+.eta{background:var(--acc-soft);border-radius:12px;padding:10px 12px;font-size:14px;margin:-4px 0 14px;display:grid;gap:6px}
+.eta:empty{display:none}
+.muted{color:var(--muted)}
+.chipbtn.free{border-color:var(--st-done);color:var(--st-done)}
+.chipbtn.busy{border-color:var(--line);color:var(--muted)}
+.chipbtn.sel{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
+a.btn{display:flex;align-items:center;justify-content:center;text-decoration:none}
+.btn.wa{background:#25d366;color:#fff;display:flex;align-items:center;justify-content:center;text-decoration:none}
+.sh-f{flex-wrap:wrap}
+.sh-f .btn{flex:1 1 auto;min-width:110px}
+.imgprev img{width:100%;border-radius:14px;box-shadow:var(--sh);margin-bottom:10px}
 .carimg{width:64px;height:64px;border-radius:12px;object-fit:cover;flex:0 0 auto}
 .toast{position:fixed;left:50%;bottom:calc(90px + var(--safe-b));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;z-index:60;max-width:90vw}
 @media (min-width:900px){.ov{align-items:center}.sheet{border-radius:20px}}
@@ -297,6 +309,22 @@ function routeHref(points) {
 function flightHref(f) { const m = /\b([A-Z0-9]{2}|[A-Z]{3})\s?(\d{1,4})\b/i.exec(String(f || '')); return m ? 'https://www.flightradar24.com/data/flights/' + (m[1] + m[2]).toLowerCase() : null; }
 function cleanPt(p) { return String(p || '').replace(URL_RE, '').replace(/\s+/g, ' ').replace(/[,\s]+$/, '').trim(); }
 function nowMin() { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); }
+// Текст для запиту маршруту в Google: адреса з довідника, а для коротких посилань — зрозуміла назва.
+function etaQuery(point) {
+  const r = resolvePoint(point); if (!r) return '';
+  if (!r.url) return r.q;
+  const p = cleanPt(point);
+  if (/урядов|ber|аеропорт|аэропорт|flughafen/i.test(p)) return 'Flughafen Berlin Brandenburg, Schönefeld';
+  return p + ', Berlin';
+}
+const round5 = (x, up) => (up ? Math.ceil(x / 5) : Math.floor(x / 5)) * 5;
+function etaRange(sec) { const m = sec / 60; const lo = Math.max(5, round5(m * 0.95)), hi = Math.max(lo + 5, round5(m * 1.2, true)); return [lo, hi]; }
+const _eta = {};
+async function getEta(origin, dest, date, time) {
+  const k = [origin, dest, date, time].join('|');
+  if (!_eta[k]) _eta[k] = api('eta', { origin, dest, date, time }).catch(e => { delete _eta[k]; throw e; });
+  return _eta[k];
+}
 function dur(m) { m = Math.abs(m); return m >= 60 ? Math.floor(m / 60) + ' год ' + (m % 60 ? (m % 60) + ' хв' : '') : m + ' хв'; }
 function tripHash(t) { return [t.date, t.tFrom, t.from, t.tTo, t.to, t.people, t.pax, t.car, t.flight, t.route, t.contact, t.type, t.status === 'відмінено' ? 'x' : ''].join('|'); }
 function toast(msg) {
@@ -471,7 +499,29 @@ function heroCard(t, today) {
     h('div', { class: 'acts' },
       navNow ? h('a', { class: 'act sec2', href: navNow, target: '_blank', rel: 'noopener' }, ico('nav'), 'Навігація') : null,
       t.contact ? h('a', { class: 'act sec2', href: tel(t.contact), }, ico('ph'), 'На місці') : null,
-      h('button', { class: 'act sec2', onclick: () => noteSheet(t) }, ico('note'), 'Коментар')));
+      h('button', { class: 'act sec2', onclick: () => noteSheet(t) }, ico('note'), 'Коментар')),
+    ['призначено', 'прийнято'].includes(t.status) && t.from ? leaveBox(t) : null);
+}
+// «Коли виїжджати?» — від поточної позиції водія до місця подачі.
+function leaveBox(t) {
+  const box = h('div', { class: 'leave' });
+  const btn = h('button', { class: 'tool', onclick: () => {
+    if (!navigator.geolocation) return (box.textContent = 'Телефон не дає визначити позицію.');
+    btn.disabled = true; btn.textContent = 'Визначаю позицію…';
+    navigator.geolocation.getCurrentPosition(async pos => {
+      try {
+        const o = pos.coords.latitude.toFixed(5) + ',' + pos.coords.longitude.toFixed(5);
+        const r = await getEta(o, etaQuery(t.from), t.date, fmtT(t.tFrom));
+        const [lo, hi] = etaRange(r.trafficSec || r.sec);
+        const s0 = mins(t.tFrom);
+        const leave = s0 != null ? s0 - 10 - hi : null;
+        box.replaceChildren(...[h('div', null, h('b', null, 'Звідси до подачі ≈ ' + lo + '–' + hi + ' хв'), r.meters ? ' (' + (r.meters / 1000).toFixed(0) + ' км)' : ''),
+          leave != null ? h('div', null, 'Щоб бути на місці за 10 хв до подачі, виїжджайте до ', h('b', null, hhmm((leave + 1440) % 1440)), t.date !== S.data.today ? ' (' + dayTitle(t.date, S.data.today).split(',')[0].toLowerCase() + ')' : leave < nowMin() ? h('span', { style: 'color:var(--red)' }, ' — вже час!') : '') : null].filter(Boolean));
+      } catch (e) { box.textContent = e.message; }
+    }, err => { box.textContent = err.code === 1 ? 'Дозвольте доступ до геолокації в налаштуваннях браузера.' : 'Не вдалося визначити позицію.'; }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 });
+  } }, ico('nav'), 'Коли виїжджати?');
+  box.append(btn);
+  return box;
 }
 // Крок водія: спершу відкриваємо навігацію (iOS дозволяє лише одразу після натискання), потім пишемо статус.
 function doStep(t, st, btn) {
@@ -622,6 +672,7 @@ function renderCoord(main) {
   if (S.view === 'timeline') return timeline(main, list, cf, day);
   if (S.view === 'cars') return carsView(main, d.trips.filter(t => t.date === day));
 
+  main.append(h('div', { class: 'tools', style: 'margin-top:10px' }, h('button', { class: 'tool', onclick: () => shareSheet(d.trips.filter(t => t.date === day), { day: true }) }, ico('share'), 'Поділитися розкладом дня')));
   const q = h('input', { class: 'inp search', type: 'search', placeholder: 'Пошук: прізвище, готель, делегація, авто', value: S.q, oninput: e => { S.q = e.target.value; drawList(); } });
   const box = h('div');
   main.append(q, box);
@@ -758,6 +809,47 @@ function editSheet(t) {
     sel('status', 'Статус', (d.statuses || []).map(x => [x, x]))];
   if (t.car && !(d.cars || []).some(c => c.code === t.car)) f.car.append(h('option', { value: t.car }, t.car)), (f.car.value = t.car);
   const collect = () => { const o = { uid: t.uid }; for (const [k, el] of Object.entries(f)) o[k] = el.value.trim(); return o; };
+  // Хто вільний на цей час
+  const avail = h('div', { class: 'quick', style: 'margin-top:-6px' });
+  const drawAvail = () => {
+    const o = collect(); const sp0 = span(o);
+    avail.replaceChildren();
+    if (!o.date || !sp0) return;
+    (d.cars || []).forEach(c => {
+      const busy = d.trips.filter(x => x.car === c.code && x.date === o.date && x.uid !== t.uid && x.status !== 'відмінено').map(x => [x, span(x)]).filter(([x, s2]) => s2 && s2[0] < sp0[1] && sp0[0] < s2[1] && !sameTrip(x, o));
+      avail.append(h('button', { class: 'chipbtn ' + (busy.length ? 'busy' : 'free') + (f.car.value === c.code ? ' sel' : ''), title: busy.map(([x]) => fmtT(x.tFrom) + ' ' + cleanPt(x.from) + ' → ' + cleanPt(x.to)).join('\n'),
+        onclick: () => { f.car.value = c.code; drawAvail(); } }, c.code + (busy.length ? ' · зайнятий ' + fmtT(busy[0][0].tFrom) : ' · вільний')));
+    });
+  };
+  // Час у дорозі за Google Maps
+  const etaBox = h('div', { class: 'eta' });
+  let etaTimer;
+  const drawEta = () => {
+    clearTimeout(etaTimer);
+    etaTimer = setTimeout(async () => {
+      const o = collect();
+      if (!o.from || !o.to) { etaBox.replaceChildren(); return; }
+      etaBox.replaceChildren(h('span', { class: 'muted' }, 'Рахую час у дорозі…'));
+      try {
+        const r = await getEta(etaQuery(o.from), etaQuery(o.to), o.date, mins(o.tFrom) != null ? fmtT(o.tFrom) : '');
+        const [lo, hi] = etaRange(r.trafficSec || r.sec);
+        const gm = Math.round((r.trafficSec || r.sec) / 60);
+        const kids = [h('div', null, h('b', null, 'У дорозі ≈ ' + lo + '–' + hi + ' хв'), h('span', { class: 'muted' }, '  Google: ' + gm + ' хв' + (r.meters ? ', ' + (r.meters / 1000).toFixed(0) + ' км' : '')))];
+        const s0 = mins(o.tFrom), e0 = mins(o.tTo);
+        if (s0 != null) kids.push(h('div', null, 'Прибуття ≈ ' + hhmm(s0 + lo) + '–' + hhmm(s0 + hi) + ' ', h('button', { class: 'chipbtn', onclick: () => { f.tTo.value = hhmm(s0 + hi); drawAvail(); } }, 'Поставити ' + hhmm(s0 + hi))));
+        else if (e0 != null) kids.push(h('div', null, 'Щоб бути там о ' + hhmm(e0) + ', подача не пізніше ' + hhmm((e0 - hi + 1440) % 1440) + ' ', h('button', { class: 'chipbtn', onclick: () => { f.tFrom.value = hhmm((e0 - hi + 1440) % 1440); drawAvail(); drawEta(); } }, 'Поставити ' + hhmm((e0 - hi + 1440) % 1440))));
+        etaBox.replaceChildren(...kids);
+      } catch (e) { etaBox.replaceChildren(h('span', { class: 'muted' }, 'Час у дорозі: ' + e.message)); }
+    }, 600);
+  };
+  ['date', 'tFrom', 'tTo', 'from', 'to'].forEach(k => f[k].addEventListener('change', () => { drawAvail(); drawEta(); }));
+  ['tFrom', 'tTo'].forEach(k => f[k].addEventListener('input', drawAvail));
+  f.car.addEventListener('change', drawAvail);
+  const carIdx = body.findIndex(x => x && x.contains && x.contains(f.car));
+  body.splice(carIdx + 1, 0, avail);
+  const toIdx = body.findIndex(x => x && x.contains && x.contains(f.to));
+  body.splice(toIdx + 1, 0, etaBox);
+  setTimeout(() => { drawAvail(); drawEta(); }, 0);
   const save = async (btn, extra) => {
     const o = { ...collect(), ...extra };
     if (!o.date || !(o.from || o.to)) return toast('Вкажіть дату і хоча б одну точку');
@@ -813,19 +905,147 @@ function planText(list, car, o) {
   if (o.photo && car.photo) L.push('Фото авто: ' + car.photo);
   return L.join('\n');
 }
+// ---- картинка-картка поїздки (PNG) ----
+const BRANDS = /\b(ford|transit|bmw|volvo|s60|mercedes|vito|sprinter|volkswagen|volkswage|vw|t6|caravelle|caddy|multivan|man|opel|zafira|movano|vivaro|audi|skoda|toyota|renault|trafic|peugeot|citroen|hyundai|kia)\b/gi;
+function plateOf(car) {
+  const rest = String(car.car || '').replace(BRANDS, ' ').replace(/\s+/g, ' ').trim();
+  return (rest.replace(/\D/g, '').length >= 2 && rest.length >= 3) ? rest.toUpperCase() : '';
+}
+function modelOf(car) { const full = String(car.car || ''), p = plateOf(car); if (!p) return full; const i = full.toUpperCase().lastIndexOf(p); return (i >= 0 ? full.slice(0, i) : full).trim() || full; }
+function kindOf(car) {
+  const n = String(car.car || '').toLowerCase();
+  if (/transit|vito|sprinter|caravelle|t6|man\b|movano|vivaro|trafic|multivan/.test(n) || Number(car.seats) >= 7) return 'van';
+  if (/caddy|zafira|touran|minivan/.test(n) || Number(car.seats) >= 5) return 'mpv';
+  return 'sedan';
+}
+function colorOf(car) {
+  const c = String(car.color || '').toLowerCase();
+  if (/темно-сір|графіт/.test(c)) return '#4b5563';
+  if (/чорн/.test(c)) return '#1f2937';
+  if (/біл/.test(c)) return '#f8fafc';
+  if (/срібл|сір/.test(c)) return '#c0c6ce';
+  if (/син|блакит/.test(c)) return '#1d4ed8';
+  if (/червон/.test(c)) return '#b91c1c';
+  if (/зелен/.test(c)) return '#15803d';
+  return '#9ca3af';
+}
+function drawCar(g, x, y, w, kind, fill) {
+  const H = kind === 'sedan' ? w * 0.32 : w * 0.42;
+  g.save(); g.translate(x, y); g.lineJoin = 'round';
+  g.fillStyle = fill; g.strokeStyle = '#0b1220'; g.lineWidth = w * 0.012;
+  g.beginPath();
+  if (kind === 'sedan') {
+    g.moveTo(0, H * 0.95); g.lineTo(0, H * 0.55); g.quadraticCurveTo(w * 0.02, H * 0.42, w * 0.16, H * 0.4);
+    g.lineTo(w * 0.3, H * 0.08); g.quadraticCurveTo(w * 0.33, 0, w * 0.4, 0); g.lineTo(w * 0.66, 0); g.quadraticCurveTo(w * 0.72, 0, w * 0.76, H * 0.1);
+    g.lineTo(w * 0.86, H * 0.4); g.quadraticCurveTo(w * 0.99, H * 0.44, w, H * 0.6); g.lineTo(w, H * 0.95); g.closePath();
+  } else {
+    const r = kind === 'van' ? 0.06 : 0.1;
+    g.moveTo(0, H * 0.95); g.lineTo(0, H * 0.12); g.quadraticCurveTo(0, 0, w * r, 0); g.lineTo(w * (kind === 'van' ? 0.78 : 0.7), 0);
+    g.quadraticCurveTo(w * 0.84, 0, w * 0.9, H * 0.3); g.lineTo(w * 0.98, H * 0.5); g.quadraticCurveTo(w, H * 0.55, w, H * 0.65); g.lineTo(w, H * 0.95); g.closePath();
+  }
+  g.fill(); g.stroke();
+  // вікна
+  g.fillStyle = 'rgba(15,23,42,.78)';
+  g.beginPath();
+  if (kind === 'sedan') { g.moveTo(w * 0.32, H * 0.38); g.lineTo(w * 0.41, H * 0.1); g.lineTo(w * 0.52, H * 0.1); g.lineTo(w * 0.52, H * 0.38); g.closePath(); g.moveTo(w * 0.55, H * 0.38); g.lineTo(w * 0.55, H * 0.1); g.lineTo(w * 0.65, H * 0.1); g.lineTo(w * 0.73, H * 0.38); g.closePath(); }
+  else { const top = H * 0.1, bot = H * 0.42; [[0.05, 0.27], [0.3, 0.52], [0.55, 0.74]].forEach(([a, b]) => g.rect(w * a, top, w * (b - a), bot - top)); g.moveTo(w * 0.77, top); g.lineTo(w * 0.85, top); g.lineTo(w * 0.93, bot); g.lineTo(w * 0.77, bot); g.closePath(); }
+  g.fill();
+  // колеса
+  [[0.2], [0.8]].forEach(([cx]) => { g.beginPath(); g.fillStyle = '#0b1220'; g.arc(w * cx, H * 0.95, w * 0.085, 0, 7); g.fill(); g.beginPath(); g.fillStyle = '#9ca3af'; g.arc(w * cx, H * 0.95, w * 0.035, 0, 7); g.fill(); });
+  g.restore();
+  return H + w * 0.09;
+}
+function wrapText(g, text, x, y, maxW, lh, maxLines = 3) {
+  const words = String(text).split(/\s+/); let line = '', n = 0;
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (g.measureText(test).width > maxW && line) { g.fillText(line, x, y); y += lh; line = w; if (++n >= maxLines - 1) { line = words.slice(words.indexOf(w)).join(' '); break; } }
+    else line = test;
+  }
+  if (line) { while (g.measureText(line).width > maxW && line.length > 3) line = line.slice(0, -2); g.fillText(line, x, y); y += lh; }
+  return y;
+}
+async function loadImg(src) { return new Promise(res => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => res(im); im.onerror = () => res(null); im.src = src; setTimeout(() => res(null), 6000); }); }
+async function tripImage(t, o) {
+  const car = carOf(t) || {}, W = 1080, Hh = 1800;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = Hh; const g = cv.getContext('2d');
+  const F = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif';
+  g.fillStyle = '#f3f4f6'; g.fillRect(0, 0, W, Hh);
+  g.fillStyle = '#0b3a75'; g.fillRect(0, 0, W, 190); g.fillStyle = '#ffd500'; g.fillRect(0, 190, W, 12);
+  g.fillStyle = '#fff'; g.font = '600 40px ' + F; g.fillText('Трансфер', 60, 80);
+  g.font = '800 54px ' + F; g.fillText(dayLong(t.date), 60, 150);
+  let y = 300; const s0 = mins(t.tFrom);
+  g.fillStyle = '#111827'; g.font = '800 150px ' + F; g.fillText(fmtT(t.tFrom), 60, y + 40);
+  if (s0 != null && o.buf > 0) { g.font = '600 38px ' + F; g.fillStyle = '#0b57b7'; g.fillText('Водій на місці з ' + hhmm(s0 - o.buf), 520, y - 30); g.fillStyle = '#6b7280'; g.font = '500 32px ' + F; g.fillText('за ' + o.buf + ' хв до виїзду', 520, y + 22); }
+  y += 110; g.fillStyle = '#6b7280'; g.font = '600 32px ' + F; g.fillText('Подача', 60, y); y += 50;
+  g.fillStyle = '#111827'; g.font = '700 46px ' + F; y = wrapText(g, cleanPt(t.from), 60, y, W - 120, 56, 2);
+  if (t.to) { y += 14; g.fillStyle = '#6b7280'; g.font = '600 32px ' + F; g.fillText('Призначення', 60, y); y += 48; g.fillStyle = '#111827'; g.font = '600 40px ' + F; y = wrapText(g, cleanPt(t.to) + (t.tTo ? ' · ~' + fmtT(t.tTo) : ''), 60, y, W - 120, 50, 2); }
+  if (t.people || t.pax) { y += 14; g.fillStyle = '#6b7280'; g.font = '600 32px ' + F; g.fillText('Пасажири' + (t.pax ? ' (' + t.pax + ')' : ''), 60, y); y += 46; g.fillStyle = '#111827'; g.font = '500 36px ' + F; y = wrapText(g, t.people || '—', 60, y, W - 120, 46, 2); }
+  // блок авто
+  const top = y + 30, bh = 470;
+  g.fillStyle = '#fff'; g.beginPath(); g.roundRect ? g.roundRect(40, top, W - 80, bh, 36) : g.rect(40, top, W - 80, bh); g.fill();
+  let img = null; if (o.photo && car.photo && /^https?:/.test(car.photo)) img = await loadImg(car.photo);
+  if (img) { const iw = 420, ih = Math.min(bh - 60, 300); g.save(); g.beginPath(); g.roundRect ? g.roundRect(70, top + 30, iw, ih, 24) : g.rect(70, top + 30, iw, ih); g.clip(); const sc = Math.max(iw / img.width, ih / img.height); g.drawImage(img, 70 + (iw - img.width * sc) / 2, top + 30 + (ih - img.height * sc) / 2, img.width * sc, img.height * sc); g.restore(); }
+  else drawCar(g, 80, top + 70, 400, kindOf(car), colorOf(car));
+  const tx = 530; let ty = top + 80;
+  g.fillStyle = '#111827'; g.font = '800 44px ' + F; ty = wrapText(g, modelOf(car) || car.code || 'Авто', tx, ty, W - tx - 70, 52, 2);
+  g.fillStyle = '#6b7280'; g.font = '500 34px ' + F; if (car.color) { g.fillText(car.color, tx, ty); ty += 50; }
+  const plate = plateOf(car);
+  if (plate) { g.font = '800 46px ' + F; const pw = g.measureText(plate).width + 70; g.fillStyle = '#fff'; g.strokeStyle = '#111827'; g.lineWidth = 5; g.beginPath(); g.roundRect ? g.roundRect(tx, ty, pw, 74, 10) : g.rect(tx, ty, pw, 74); g.fill(); g.stroke(); g.fillStyle = '#1d4ed8'; g.fillRect(tx + 3, ty + 3, 26, 68); g.fillStyle = '#111827'; g.fillText(plate, tx + 46, ty + 55); ty += 135; }
+  g.fillStyle = '#6b7280'; g.font = '600 30px ' + F; g.fillText('Водій', tx, ty); ty += 46;
+  g.fillStyle = '#111827'; g.font = '700 38px ' + F; ty = wrapText(g, car.driver || '—', tx, ty, W - tx - 70, 46, 2);
+  if (o.phone && car.phone) { g.fillStyle = '#0b57b7'; g.font = '700 38px ' + F; g.fillText(fmtPhone(car.phone), tx, ty + 4); }
+  const outH = top + bh + 40, out = document.createElement('canvas'); out.width = W; out.height = outH;
+  out.getContext('2d').drawImage(cv, 0, 0);
+  return new Promise(res => out.toBlob(b => res(b), 'image/png'));
+}
+function waHref(text, phone) { return 'https://wa.me/' + (phone ? String(phone).replace(/\D/g, '') : '') + '?text=' + encodeURIComponent(text); }
+
+function dayText(list, o) {
+  const by = {};
+  list.filter(t => t.status !== 'відмінено').sort(byTime).forEach(t => (by[t.car || '—'] = by[t.car || '—'] || []).push(t));
+  const L = ['Розклад авто: ' + dayLong(list[0].date), ''];
+  Object.entries(by).forEach(([code, ts]) => {
+    const c = (S.data.cars || []).find(x => x.code === code);
+    L.push(c ? (c.driver || code) + ' · ' + [c.car, c.color].filter(Boolean).join(', ') + (o.phone && c.phone ? ' · ' + fmtPhone(c.phone) : '') : (code === '—' ? 'Без авто' : code));
+    ts.forEach(t => L.push('  ' + fmtT(t.tFrom) + '  ' + cleanPt(t.from) + (t.to ? ' → ' + cleanPt(t.to) : '') + (t.people ? ' · ' + t.people : '')));
+    L.push('');
+  });
+  return L.join('\n').trim();
+}
 function shareSheet(list, opt = {}) {
   const o = ls.get('shareOpts', { buf: 10, phone: true, map: true, photo: true });
   const ta = h('textarea', { class: 'inp', style: 'min-height:260px;font-size:15px' });
-  const build = () => { ta.value = opt.plan ? planText(list, opt.plan, o) : transferText(list[0], o); };
+  const build = () => { ta.value = opt.day ? dayText(list, o) : opt.plan ? planText(list, opt.plan, o) : transferText(list[0], o); };
   const tog = (k, label) => h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: o[k] ? true : null, onchange: e => { o[k] = e.target.checked; ls.set('shareOpts', o); build(); } }), label);
   const bufSel = h('div', { class: 'seg', style: 'margin:0 0 10px' }, [0, 10, 15].map(b => h('button', { class: o.buf === b ? 'on' : '', onclick: e => { o.buf = b; ls.set('shareOpts', o); [...e.currentTarget.parentNode.children].forEach(x => x.classList.toggle('on', x === e.currentTarget)); build(); } }, b ? 'Водій за ' + b + ' хв' : 'Без запасу')));
   build();
   const copy = async () => { try { await navigator.clipboard.writeText(ta.value); toast('Скопійовано'); } catch { ta.select(); document.execCommand('copy'); toast('Скопійовано'); } };
-  const body = [!opt.plan ? bufSel : null, h('div', { class: 'quick' }, tog('phone', 'Телефон водія'), tog('map', opt.plan ? 'Маршрут на карті' : 'Точка на карті'), tog('photo', 'Фото авто')), ta,
+  const body = [!opt.plan && !opt.day ? bufSel : null, h('div', { class: 'quick' }, tog('phone', 'Телефон водія'), tog('map', opt.plan ? 'Маршрут на карті' : 'Точка на карті'), tog('photo', 'Фото авто')), ta,
     h('div', { class: 'hero-hint', style: 'text-align:left' }, 'Текст можна підправити перед відправкою.')];
-  const foot = [h('button', { class: 'btn ghost', style: 'flex:0 0 auto;width:auto;padding:0 18px', onclick: copy }, 'Копіювати')];
-  if (navigator.share) foot.push(h('button', { class: 'btn', onclick: async () => { try { await navigator.share({ text: ta.value }); } catch (e) { if (e.name !== 'AbortError') copy(); } } }, 'Поділитися…'));
-  sheet(opt.plan ? 'План водія' : 'Поділитися поїздкою', body, foot);
+  const single = !opt.plan && !opt.day && list.length === 1;
+  const car = single ? carOf(list[0]) : opt.plan;
+  // Картинку готуємо заздалегідь, щоб «Поділитися» спрацював одразу після натискання (вимога iOS).
+  let imgFile = null; const prev = h('div', { class: 'imgprev' });
+  const makeImg = async () => {
+    if (!single) return;
+    const blob = await tripImage(list[0], o);
+    if (!blob) return;
+    imgFile = new File([blob], 'transfer-' + list[0].date + '-' + fmtT(list[0].tFrom).replace(':', '') + '.png', { type: 'image/png' });
+    prev.replaceChildren(h('img', { src: URL.createObjectURL(blob), alt: 'Картка поїздки' }));
+  };
+  if (single) { body.unshift(prev); makeImg(); [...body].forEach(el => el?.querySelectorAll?.('input,button').forEach(i => i.addEventListener('click', () => setTimeout(makeImg, 50)))); }
+  const shareNative = async (withImg) => {
+    const data = { text: ta.value };
+    if (withImg && imgFile && navigator.canShare?.({ files: [imgFile] })) data.files = [imgFile];
+    try { await navigator.share(data); } catch (e) { if (e.name !== 'AbortError') copy(); }
+  };
+  const foot = [
+    h('a', { class: 'btn wa', href: '#', onclick: e => { e.currentTarget.href = waHref(ta.value); }, target: '_blank', rel: 'noopener' }, 'WhatsApp'),
+    car?.phone ? h('a', { class: 'btn ghost', href: '#', onclick: e => { e.currentTarget.href = waHref(ta.value, car.phone); }, target: '_blank', rel: 'noopener', style: 'flex:0 0 auto;width:auto;padding:0 14px' }, 'Водію') : null,
+    navigator.share ? h('button', { class: 'btn', onclick: () => shareNative(true) }, single ? 'З картинкою…' : 'Поділитися…') : null,
+    h('button', { class: 'btn ghost', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: copy }, 'Копіювати')];
+  sheet(opt.day ? 'Розклад дня' : opt.plan ? 'План водія' : 'Поділитися поїздкою', body, foot);
 }
 
 // ====== bottom sheet ======
