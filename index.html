@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Авто ПУ">
+<meta name="theme-color" content="#0b3a75">
+<title>Авто ПУ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f3f4f6;--card:#fff;--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--soft:#f9fafb;
+  --acc:#0b57b7;--acc-ink:#fff;--acc-soft:#e8f0fb;--yel:#ffd500;--red:#c62828;--red-soft:#fdecec;
+  --st-pr:#6b7280;--st-ok:#0b57b7;--st-go:#d97706;--st-at:#7c3aed;--st-done:#15803d;--st-x:#9ca3af;
+  --r:14px;--sh:0 1px 2px rgba(0,0,0,.05),0 1px 8px rgba(0,0,0,.04);
+  --safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f1115;--card:#181b21;--ink:#f1f3f6;--muted:#9aa3af;--line:#2a2f37;--soft:#1e222a;
+  --acc:#5b9cf0;--acc-ink:#08111f;--acc-soft:#16253b;--red:#ef6b6b;--red-soft:#3a1d1f;
+  --st-pr:#9aa3af;--st-ok:#5b9cf0;--st-go:#f0a83a;--st-at:#a78bfa;--st-done:#4ade80;--st-x:#6b7280;
+  --sh:none;
+}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--acc)}
+.hidden{display:none!important}
+.num{font-variant-numeric:tabular-nums}
+
+/* top bar */
+.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.6) blur(12px);-webkit-backdrop-filter:saturate(1.6) blur(12px);padding:calc(var(--safe-t) + 10px) 16px 10px;border-bottom:1px solid var(--line)}
+.top-row{display:flex;align-items:center;gap:10px}
+.top h1{font-size:20px;margin:0;font-weight:700;letter-spacing:-.01em;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .sub{color:var(--muted);font-size:13px;margin-top:2px}
+.ib{border:0;background:var(--card);box-shadow:var(--sh);border-radius:12px;height:40px;min-width:40px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font-size:14px;font-weight:600}
+.ib svg{width:18px;height:18px}
+.spin svg{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
+
+main{padding:12px 12px calc(110px + var(--safe-b));max-width:760px;margin:0 auto}
+.wide main{max-width:1200px}
+.banner{margin:10px 12px 0;padding:10px 12px;border-radius:12px;font-size:14px;background:var(--acc-soft)}
+.banner.err{background:var(--red-soft);color:var(--red)}
+
+/* login */
+.login{min-height:100dvh;display:flex;flex-direction:column;justify-content:center;padding:24px;max-width:420px;margin:0 auto}
+.logo{width:72px;height:72px;border-radius:18px;background:var(--acc);display:flex;align-items:center;justify-content:center;margin-bottom:18px}
+.logo svg{width:44px;height:44px}
+.login h2{font-size:28px;margin:0 0 4px;letter-spacing:-.02em}
+.login p{color:var(--muted);margin:0 0 24px}
+.fld{display:block;margin-bottom:14px}
+.fld span{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;font-weight:600}
+.inp{width:100%;height:50px;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:0 14px;font-size:17px;outline:none}
+.inp:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft)}
+textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
+.btn{width:100%;height:52px;border:0;border-radius:14px;background:var(--acc);color:var(--acc-ink);font-weight:700;font-size:17px;cursor:pointer}
+.btn:disabled{opacity:.6}
+.btn.ghost{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:var(--red-soft);color:var(--red)}
+.err{color:var(--red);font-size:14px;min-height:20px;margin:6px 0}
+.hint{margin-top:28px;font-size:13px;color:var(--muted);background:var(--card);border-radius:12px;padding:12px 14px;box-shadow:var(--sh)}
+
+/* sections & cards */
+.sec{margin:18px 4px 8px;display:flex;align-items:baseline;gap:8px}
+.sec h3{margin:0;font-size:17px;letter-spacing:-.01em}
+.sec .c{color:var(--muted);font-size:14px}
+.card{background:var(--card);border-radius:var(--r);box-shadow:var(--sh);padding:14px;margin-bottom:10px;position:relative;border:1px solid transparent}
+.card.new{border-color:var(--yel);box-shadow:0 0 0 2px color-mix(in srgb,var(--yel) 45%,transparent)}
+.card.conf{border-color:var(--red)}
+.card.x{opacity:.55}
+.card.x .tm,.card.x .pts{text-decoration:line-through}
+.chead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tm{font-size:22px;font-weight:750;letter-spacing:-.02em}
+.tm small{font-size:15px;font-weight:600;color:var(--muted)}
+.chip{font-size:12px;font-weight:700;border-radius:999px;padding:3px 9px;background:var(--soft);color:var(--muted);white-space:nowrap}
+.chip.st{color:#fff}
+.chip.badge{background:var(--yel);color:#3a2f00}
+.chip.cf{background:var(--red);color:#fff}
+.chip.car{background:var(--acc-soft);color:var(--acc)}
+.sp{flex:1}
+.pts{margin:10px 0 4px;display:grid;grid-template-columns:18px 1fr auto;gap:2px 10px;align-items:start}
+.dot{width:10px;height:10px;border-radius:50%;margin:6px 4px 0;border:2px solid var(--acc)}
+.dot.b{background:var(--acc)}
+.vline{width:2px;background:var(--line);margin:0 8px;min-height:10px}
+.pt{font-weight:600;word-break:break-word}
+.pt small{display:block;color:var(--muted);font-weight:500}
+.nav{border:0;background:var(--acc-soft);color:var(--acc);border-radius:10px;height:34px;padding:0 10px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:4px;text-decoration:none;white-space:nowrap}
+.meta{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin-top:10px;font-size:14px}
+.meta dt{color:var(--muted)}
+.meta dd{margin:0;word-break:break-word;white-space:pre-line}
+.acts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.act{flex:1;min-width:120px;height:46px;border:0;border-radius:12px;font-weight:700;font-size:15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
+.act.main{background:var(--acc);color:var(--acc-ink)}
+.act.sec2{background:var(--soft);color:var(--ink);flex:0 0 auto;min-width:46px;padding:0 14px}
+.empty{text-align:center;color:var(--muted);padding:48px 16px}
+.empty b{display:block;color:var(--ink);font-size:17px;margin-bottom:4px}
+.calls{display:flex;gap:8px;overflow-x:auto;padding:2px 4px 4px;margin:0 -4px;scrollbar-width:none}
+.calls a{flex:0 0 auto;text-decoration:none;color:var(--ink);background:var(--card);box-shadow:var(--sh);border-radius:12px;padding:8px 12px;font-size:14px;display:flex;align-items:center;gap:8px}
+.calls a svg{width:16px;height:16px;color:var(--st-done)}
+
+/* coordinator */
+.dbar{display:flex;align-items:center;gap:8px;margin-top:10px}
+.dbar .d{flex:1;text-align:center;font-weight:700}
+.dbar input[type=date]{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
+.seg{display:flex;background:var(--soft);border-radius:12px;padding:3px;margin-top:10px}
+.seg button{flex:1;border:0;background:transparent;height:34px;border-radius:9px;font-weight:600;font-size:14px;color:var(--muted);cursor:pointer}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--sh)}
+.stats{display:flex;gap:8px;overflow-x:auto;margin:12px 0 4px;scrollbar-width:none}
+.stat{flex:0 0 auto;background:var(--card);box-shadow:var(--sh);border-radius:12px;padding:8px 12px;font-size:13px;color:var(--muted);border:0;text-align:left;cursor:pointer}
+.stat b{display:block;font-size:20px;color:var(--ink)}
+.stat.warn b{color:var(--red)}
+.stat.on{outline:2px solid var(--acc)}
+.search{margin-top:10px}
+
+.tl{background:var(--card);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden;margin-top:10px}
+.tl-scroll{overflow-x:auto;position:relative}
+.tl-grid{position:relative}
+.tl-hours{display:flex;height:28px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);z-index:2}
+.tl-hours div{flex:0 0 auto;font-size:11px;color:var(--muted);padding:6px 0 0 4px;border-left:1px solid var(--line)}
+.tl-row{display:flex;border-bottom:1px solid var(--line);min-height:58px}
+.tl-lab{position:sticky;left:0;z-index:3;flex:0 0 96px;background:var(--card);border-right:1px solid var(--line);padding:8px;font-size:12px;line-height:1.25}
+.tl-lab b{display:block;font-size:13px}
+.tl-lab span{color:var(--muted)}
+.tl-lane{position:relative;flex:0 0 auto}
+.tl-blk{position:absolute;border-radius:8px;padding:4px 6px;font-size:11px;line-height:1.2;overflow:hidden;color:#fff;cursor:pointer;border:0;text-align:left}
+.tl-blk b{display:block;font-size:12px}
+.tl-blk.cf{outline:2px solid var(--red);outline-offset:1px}
+.tl-blk.x{opacity:.45;text-decoration:line-through}
+.tl-now{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:1;pointer-events:none}
+
+.fab{position:fixed;right:16px;bottom:calc(18px + var(--safe-b));z-index:30;height:56px;border-radius:18px;border:0;background:var(--acc);color:var(--acc-ink);font-weight:700;font-size:16px;padding:0 20px;box-shadow:0 8px 24px rgba(11,87,183,.35);display:flex;align-items:center;gap:8px;cursor:pointer}
+.carl .card{display:flex;gap:12px;align-items:center}
+.carl .ci{flex:1;min-width:0}
+.carl .ci b{display:block}
+.carl .ci span{color:var(--muted);font-size:14px}
+
+/* sheet */
+.ov{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:640px;max-height:94dvh;border-radius:20px 20px 0 0;display:flex;flex-direction:column;animation:up .2s ease}
+@keyframes up{from{transform:translateY(30px);opacity:.6}}
+.sh-h{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.sh-h h3{margin:0;flex:1;font-size:18px}
+.sh-b{overflow-y:auto;padding:14px 16px}
+.sh-f{padding:12px 16px calc(12px + var(--safe-b));border-top:1px solid var(--line);display:flex;gap:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.toast{position:fixed;left:50%;bottom:calc(90px + var(--safe-b));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;z-index:60;max-width:90vw}
+@media (min-width:900px){.ov{align-items:center}.sheet{border-radius:20px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+'use strict';
+// ====== КОНФІГ ======
+const API = 'https://script.google.com/macros/s/AKfycby_EiW3rkzB-XIaQqPVt6BPVP7mh8-fr6v3OdwIfBRiUlZuuS5rS34_6qDjnSlHCK3L/exec';
+const POLL_MS = 60000;
+
+// ====== утиліти ======
+const $ = (s, r = document) => r.querySelector(s);
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  if (props) for (const [k, v] of Object.entries(props)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'style') el.style.cssText = v;
+    else if (k === 'html') el.innerHTML = v; // лише статичні іконки з цього файлу
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if (k === 'value') el.value = v;
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids.flat(Infinity)) if (c != null && c !== false) el.append(c.nodeType ? c : String(c));
+  return el;
+}
+const I = {
+  car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M5 17a2 2 0 1 0 4 0M15 17a2 2 0 1 0 4 0M3 17v-5l2-5h14l2 5v5"/><path d="M3 12h18"/></svg>',
+  ref: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>',
+  out: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg>',
+  ph: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg>',
+  nav: '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M21 3 3 10.5l7.2 2.3L12.5 20z"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  x: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  l: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  r: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg>',
+  note: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>'
+};
+const ico = n => h('span', { html: I[n], style: 'display:inline-flex' });
+const DOW = ['неділя', 'понеділок', 'вівторок', 'середа', 'четвер', "п'ятниця", 'субота'];
+const DOW_S = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+const MON = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
+const ST_COL = { 'призначено': 'var(--st-pr)', 'прийнято': 'var(--st-ok)', 'в дорозі': 'var(--st-go)', 'на місці': 'var(--st-at)', 'завершено': 'var(--st-done)', 'відмінено': 'var(--st-x)' };
+const NEXT = { 'призначено': ['прийнято', 'Прийняв'], 'прийнято': ['в дорозі', 'Виїхав'], 'в дорозі': ['на місці', 'На місці'], 'на місці': ['завершено', 'Завершив'] };
+const ls = {
+  get(k, d) { try { const v = localStorage.getItem('apu.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('apu.' + k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem('apu.' + k); } catch {} }
+};
+function dObj(iso) { return new Date(iso + 'T12:00:00'); }
+function addDays(iso, n) { const d = dObj(iso); d.setDate(d.getDate() + n); return iso8(d); }
+function iso8(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function dayTitle(iso, today) {
+  const d = dObj(iso), base = d.getDate() + ' ' + MON[d.getMonth()];
+  if (iso === today) return 'Сьогодні, ' + base;
+  if (iso === addDays(today, 1)) return 'Завтра, ' + base;
+  if (iso === addDays(today, -1)) return 'Вчора, ' + base;
+  return DOW[d.getDay()][0].toUpperCase() + DOW[d.getDay()].slice(1) + ', ' + base;
+}
+function mins(t) {
+  const m = /(\d{1,2})[:.](\d{2})/.exec(String(t || ''));
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+function hhmm(m) { return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+function span(t) {
+  const all = String(t.tFrom || '').match(/\d{1,2}[:.]\d{2}/g) || [];
+  const s = all.length ? mins(all[0]) : mins(t.tTo);
+  let e = all.length > 1 ? mins(all[1]) : mins(t.tTo);
+  if (s == null) return null;
+  if (e == null || e <= s) e = s + 60;
+  return [s, e];
+}
+function fmtT(t) { const m = mins(t); return m == null ? (t || '—') : hhmm(m); }
+function tel(p) { return 'tel:' + String(p).replace(/[^\d+]/g, ''); }
+function fmtPhone(p) { return String(p || '').replace(/^\+?(\d{2,3})(\d{2,3})(\d{3})(\d{2})(\d{2,})$/, '+$1 $2 $3 $4 $5'); }
+const URL_RE = /https?:\/\/\S+/;
+function navHref(point) {
+  const p = String(point || '').trim();
+  if (!p) return null;
+  const u = URL_RE.exec(p); if (u) return u[0];
+  const low = p.toLowerCase();
+  const a = (S.data?.addresses || []).find(x => low === x.name.toLowerCase() || low.startsWith(x.name.toLowerCase()));
+  if (a) return URL_RE.test(a.nav) ? URL_RE.exec(a.nav)[0] : 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(a.nav);
+  const q = /berlin|schönefeld|ber\b|\d{5}/i.test(p) ? p : p + ', Berlin';
+  return 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(q);
+}
+function tripHash(t) { return [t.date, t.tFrom, t.from, t.tTo, t.to, t.people, t.pax, t.car, t.flight, t.route, t.contact, t.type, t.status === 'відмінено' ? 'x' : ''].join('|'); }
+function toast(msg) {
+  const el = h('div', { class: 'toast' }, msg);
+  document.body.append(el); setTimeout(() => el.remove(), 2600);
+}
+
+// ====== API ======
+async function api(action, payload = {}) {
+  const res = await fetch(API, { method: 'POST', body: JSON.stringify({ action, token: S.token, ...payload }) });
+  if (!res.ok) throw new Error('Сервер недоступний (' + res.status + ')');
+  const j = await res.json();
+  if (!j.ok && j.error === 'auth') { logout(j.message); throw new Error(j.message); }
+  if (!j.ok) throw new Error(j.error || 'Помилка');
+  return j;
+}
+
+// ====== стан ======
+const S = {
+  token: ls.get('token', null), user: ls.get('user', null), data: ls.get('data', null), loadedAt: ls.get('loadedAt', null),
+  loading: false, error: '', offline: false,
+  view: ls.get('view', 'timeline'), day: null, filter: '', q: '', seen: ls.get('seen', null)
+};
+
+function logout(msg) {
+  ['token', 'user', 'data', 'loadedAt', 'seen'].forEach(ls.del);
+  Object.assign(S, { token: null, user: null, data: null, seen: null });
+  renderLogin(msg || '');
+}
+
+async function load(range) {
+  if (S.loading) return;
+  S.loading = true; paintBusy();
+  try {
+    const d = await api('data', range || (S.user?.admin && S.data ? { from: S.data.from, to: S.data.to } : {}));
+    S.data = d; S.user = d.user; S.loadedAt = Date.now(); S.error = ''; S.offline = false;
+    if (!S.day || (S.day < d.from || S.day > d.to)) S.day = d.today;
+    if (!S.seen) { S.seen = {}; d.trips.forEach(t => S.seen[t.uid] = tripHash(t)); ls.set('seen', S.seen); }
+    ls.set('data', d); ls.set('user', d.user); ls.set('loadedAt', S.loadedAt);
+  } catch (e) {
+    S.error = e.message; S.offline = !navigator.onLine || /fetch|network|Load failed/i.test(e.message);
+  } finally {
+    S.loading = false;
+    if (S.token) render();
+  }
+}
+function paintBusy() { const b = $('#refresh'); if (b) b.classList.toggle('spin', S.loading); }
+function markSeen(t) { S.seen = S.seen || {}; S.seen[t.uid] = tripHash(t); ls.set('seen', S.seen); }
+function badgeOf(t) {
+  if (!S.seen) return null;
+  if (!(t.uid in S.seen)) return 'НОВЕ';
+  if (S.seen[t.uid] !== tripHash(t)) return 'ЗМІНЕНО';
+  return null;
+}
+
+// ====== ВХІД ======
+function renderLogin(msg) {
+  document.body.classList.remove('wide');
+  const app = $('#app'); app.replaceChildren();
+  const err = h('div', { class: 'err' }, msg || '');
+  const login = h('input', { class: 'inp', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', placeholder: 'наприклад, Meleshko', value: ls.get('lastLogin', '') });
+  const pin = h('input', { class: 'inp num', type: 'password', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'current-password', maxlength: '8', placeholder: '••••••' });
+  const btn = h('button', { class: 'btn', type: 'submit' }, 'Увійти');
+  const form = h('form', {
+    onsubmit: async e => {
+      e.preventDefault(); err.textContent = ''; btn.disabled = true; btn.textContent = 'Перевіряю…';
+      try {
+        const j = await api('login', { login: login.value.trim(), pin: pin.value.trim() });
+        S.token = j.token; S.user = j.user; ls.set('token', j.token); ls.set('user', j.user); ls.set('lastLogin', login.value.trim());
+        S.data = null; S.seen = null; ls.del('seen');
+        render(); load();
+      } catch (x) { err.textContent = x.message; btn.disabled = false; btn.textContent = 'Увійти'; pin.value = ''; pin.focus(); }
+    }
+  },
+    h('label', { class: 'fld' }, h('span', null, 'Логін'), login),
+    h('label', { class: 'fld' }, h('span', null, 'PIN-код'), pin),
+    err, btn);
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  app.append(h('div', { class: 'login' },
+    h('div', { class: 'logo', html: I.car.replace('currentColor', '#fff') }),
+    h('h2', null, 'Авто ПУ'),
+    h('p', null, 'Поїздки та завдання для водіїв'),
+    form,
+    !standalone ? h('div', { class: 'hint' }, ios
+      ? 'Щоб застосунок був на екрані: у Safari натисніть «Поділитися» ⬆︎ → «На початковий екран».'
+      : 'Щоб застосунок був на екрані: меню браузера → «Додати на головний екран».') : null));
+  setTimeout(() => (login.value ? pin : login).focus(), 50);
+}
+
+// ====== ГОЛОВНИЙ РЕНДЕР ======
+function render() {
+  if (!S.token) return renderLogin();
+  const coord = !!S.user?.admin;
+  document.body.classList.toggle('wide', coord);
+  const app = $('#app'); app.replaceChildren();
+  const updated = S.loadedAt ? 'оновлено о ' + new Date(S.loadedAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }) : 'завантаження…';
+  const top = h('header', { class: 'top' },
+    h('div', { class: 'top-row' },
+      h('div', { style: 'flex:1;min-width:0' },
+        h('h1', null, coord ? 'Координація авто' : (S.user?.name || 'Мої поїздки')),
+        h('div', { class: 'sub' }, coord ? (S.user?.name + ' · ' + updated) : (carsLine() + ' · ' + updated))),
+      h('button', { class: 'ib' + (S.loading ? ' spin' : ''), id: 'refresh', 'aria-label': 'Оновити', html: I.ref, onclick: () => load() }),
+      h('button', { class: 'ib', 'aria-label': 'Вийти', html: I.out, onclick: () => { if (confirm('Вийти із застосунку?')) logout(); } })),
+    coord ? coordBar() : null);
+  app.append(top);
+  if (S.error) app.append(h('div', { class: 'banner err' }, S.offline ? 'Немає з\'єднання. Показано дані, збережені ' + (S.loadedAt ? new Date(S.loadedAt).toLocaleString('uk-UA') : '') : S.error));
+  const main = h('main');
+  app.append(main);
+  if (!S.data) { main.append(h('div', { class: 'empty' }, h('b', null, 'Завантажую поїздки…'))); return; }
+  if (coord) renderCoord(main); else renderDriver(main);
+}
+
+function carsLine() {
+  const cars = S.data?.cars || [];
+  if (!cars.length) return (S.user?.cars || []).join(', ');
+  return cars.map(c => c.car || c.code).join(', ');
+}
+
+// ====== ВОДІЙ ======
+function renderDriver(main) {
+  const d = S.data, today = d.today;
+  const coords = d.coordinators || [];
+  if (coords.length) main.append(h('div', { class: 'calls' }, coords.map(c => h('a', { href: tel(c.phone) }, ico('ph'), h('span', null, 'Координатор: ' + c.name)))));
+  const days = [today, addDays(today, 1)];
+  let any = false;
+  for (const day of days) {
+    const list = d.trips.filter(t => t.date === day).sort(byTime);
+    const active = list.filter(t => t.status !== 'відмінено' && t.status !== 'завершено').length;
+    main.append(h('div', { class: 'sec' }, h('h3', null, dayTitle(day, today)), h('span', { class: 'c' }, list.length ? (active + ' з ' + list.length + ' активні') : '')));
+    if (!list.length) { main.append(h('div', { class: 'card', style: 'color:var(--muted)' }, 'Поїздок немає')); continue; }
+    any = true;
+    list.forEach(t => main.append(tripCard(t, false)));
+  }
+  if (!any) main.append(h('div', { class: 'empty' }, h('b', null, 'На сьогодні й завтра поїздок немає'), 'Нові завдання з\'являться тут автоматично.'));
+}
+function byTime(a, b) { return (mins(a.tFrom) ?? mins(a.tTo) ?? 9999) - (mins(b.tFrom) ?? mins(b.tTo) ?? 9999) || String(a.car).localeCompare(String(b.car)); }
+
+function tripCard(t, coord, conflict) {
+  const badge = badgeOf(t);
+  const x = t.status === 'відмінено';
+  const car = (S.data.cars || []).find(c => c.code === t.car);
+  const card = h('div', { class: 'card' + (badge ? ' new' : '') + (conflict ? ' conf' : '') + (x ? ' x' : ''), onclick: () => { if (badge) { markSeen(t); card.classList.remove('new'); card.querySelector('.badge')?.remove(); } } });
+  const sp = span(t);
+  card.append(h('div', { class: 'chead' },
+    h('div', { class: 'tm num' }, fmtT(t.tFrom), t.tTo && mins(t.tTo) != null ? h('small', null, ' → ' + fmtT(t.tTo)) : (sp && /-|–/.test(t.tFrom) ? h('small', null, ' → ' + hhmm(sp[1])) : null)),
+    h('span', { class: 'sp' }),
+    badge ? h('span', { class: 'chip badge' }, badge) : null,
+    conflict ? h('span', { class: 'chip cf' }, 'КОНФЛІКТ') : null,
+    t.type ? h('span', { class: 'chip' }, t.type) : null,
+    h('span', { class: 'chip st', style: 'background:' + (ST_COL[t.status] || 'var(--st-pr)') }, t.status)));
+  if (coord) card.append(h('div', { style: 'margin-top:8px;display:flex;gap:6px;flex-wrap:wrap' },
+    t.car ? h('span', { class: 'chip car' }, t.car + (car ? ' · ' + car.driver : '')) : h('span', { class: 'chip cf' }, 'БЕЗ АВТО'),
+    t.deleg ? h('span', { class: 'chip' }, t.deleg) : null));
+
+  const pts = h('div', { class: 'pts' });
+  const row = (cls, label, sub, point) => {
+    const href = navHref(point);
+    pts.append(h('span', { class: 'dot ' + cls }), h('div', { class: 'pt' }, label || '—', sub ? h('small', null, sub) : null),
+      href ? h('a', { class: 'nav', href, target: '_blank', rel: 'noopener', onclick: e => e.stopPropagation() }, ico('nav'), 'Навігація') : h('span'));
+  };
+  row('', t.from, 'подача' + (t.tFrom ? ' · ' + fmtT(t.tFrom) : ''), t.from);
+  if (t.to) row('b', t.to, 'призначення' + (t.tTo ? ' · ' + fmtT(t.tTo) : ''), t.to);
+  card.append(pts);
+
+  const meta = h('dl', { class: 'meta' });
+  const m = (k, v) => { if (v) meta.append(h('dt', null, k), h('dd', null, v)); };
+  m('Пасажири', [t.pax ? t.pax + ' ос.' : '', t.people].filter(Boolean).join(' — '));
+  m('Рейс', t.flight);
+  if (!coord) m('Делегація', t.deleg);
+  m('Відповідальний', t.resp);
+  const routeTxt = String(t.route || '').replace(URL_RE, '').trim();
+  m('Маршрут', routeTxt);
+  m('Коментар', t.note);
+  if (coord && car?.phone) m('Водій', car.driver + ' · ' + fmtPhone(car.phone));
+  if (coord && t.updated) m('Оновлено', t.updated);
+  if (meta.childNodes.length) card.append(meta);
+
+  const acts = h('div', { class: 'acts' });
+  if (!x) {
+    if (!coord && NEXT[t.status]) {
+      const [ns, label] = NEXT[t.status];
+      acts.append(h('button', { class: 'act main', onclick: e => { e.stopPropagation(); setStatus(t, ns, e.currentTarget); } }, label));
+    }
+    if (t.contact) acts.append(h('a', { class: 'act sec2', href: tel(t.contact), onclick: e => e.stopPropagation() }, ico('ph'), 'На місці'));
+    if (coord && car?.phone) acts.append(h('a', { class: 'act sec2', href: tel(car.phone), onclick: e => e.stopPropagation() }, ico('ph'), 'Водій'));
+    const routeUrl = URL_RE.exec(t.route || '');
+    if (routeUrl) acts.append(h('a', { class: 'act sec2', href: routeUrl[0], target: '_blank', rel: 'noopener', onclick: e => e.stopPropagation() }, 'Карта'));
+    if (!coord) acts.append(h('button', { class: 'act sec2', 'aria-label': 'Коментар', onclick: e => { e.stopPropagation(); noteSheet(t); } }, ico('note')));
+  }
+  if (coord) acts.append(h('button', { class: 'act sec2', onclick: e => { e.stopPropagation(); markSeen(t); editSheet(t); } }, 'Змінити'));
+  if (acts.childNodes.length) card.append(acts);
+  return card;
+}
+
+async function setStatus(t, st, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Зберігаю…'; }
+  try {
+    await api('status', { uid: t.uid, status: st });
+    t.status = st; markSeen(t); ls.set('data', S.data); toast('Статус: ' + st); render();
+  } catch (e) { toast(e.message); if (btn) { btn.disabled = false; btn.textContent = 'Спробувати ще'; } }
+}
+
+function noteSheet(t) {
+  const ta = h('textarea', { class: 'inp', placeholder: 'Наприклад: затримка 10 хв, чекаю біля входу B' });
+  ta.value = t.note || '';
+  sheet('Коментар до поїздки ' + fmtT(t.tFrom), [ta], [
+    h('button', { class: 'btn', onclick: async e => {
+      e.currentTarget.disabled = true;
+      try { await api('note', { uid: t.uid, note: ta.value.trim() }); t.note = ta.value.trim(); closeSheet(); toast('Збережено'); render(); }
+      catch (x) { toast(x.message); e.currentTarget.disabled = false; }
+    } }, 'Зберегти')]);
+}
+
+// ====== КООРДИНАТОР ======
+function coordBar() {
+  const d = S.data;
+  if (!d) return null;
+  const day = S.day || d.today;
+  const di = h('input', { type: 'date', value: day, onchange: e => goDay(e.target.value) });
+  return h('div', null,
+    h('div', { class: 'dbar' },
+      h('button', { class: 'ib', 'aria-label': 'Попередній день', html: I.l, onclick: () => goDay(addDays(day, -1)) }),
+      h('label', { class: 'd', style: 'position:relative;cursor:pointer', onclick: () => di.showPicker?.() }, dayTitle(day, d.today), di),
+      day !== d.today ? h('button', { class: 'ib', onclick: () => goDay(d.today) }, 'Сьогодні') : null,
+      h('button', { class: 'ib', 'aria-label': 'Наступний день', html: I.r, onclick: () => goDay(addDays(day, 1)) })),
+    h('div', { class: 'seg' }, [['timeline', 'Шкала'], ['list', 'Список'], ['cars', 'Авто']].map(([k, l]) =>
+      h('button', { class: S.view === k ? 'on' : '', onclick: () => { S.view = k; ls.set('view', k); render(); } }, l))));
+}
+function goDay(day) {
+  if (!day) return;
+  S.day = day;
+  if (day < S.data.from || day > S.data.to) load({ from: addDays(day, -3), to: addDays(day, 14) });
+  render();
+}
+
+function conflicts(list) {
+  const out = new Set();
+  const by = {};
+  list.filter(t => t.car && t.status !== 'відмінено').forEach(t => (by[t.car] = by[t.car] || []).push(t));
+  for (const arr of Object.values(by)) {
+    const iv = arr.map(t => [t, span(t)]).filter(x => x[1]).sort((a, b) => a[1][0] - b[1][0]);
+    for (let i = 0; i < iv.length; i++) for (let j = i + 1; j < iv.length; j++) {
+      if (iv[j][1][0] >= iv[i][1][1]) break;
+      if (sameTrip(iv[i][0], iv[j][0])) continue;
+      out.add(iv[i][0].uid); out.add(iv[j][0].uid);
+    }
+  }
+  return out;
+}
+// Однакова точка й час подачі для того самого авто — це той самий рейс (кілька рядків на групу), не конфлікт.
+function sameTrip(a, b) { return mins(a.tFrom) === mins(b.tFrom) && String(a.from).trim().toLowerCase() === String(b.from).trim().toLowerCase(); }
+
+function renderCoord(main) {
+  const d = S.data, day = S.day || d.today;
+  let list = d.trips.filter(t => t.date === day).sort(byTime);
+  const cf = conflicts(list);
+  const noCar = list.filter(t => !t.car && t.status !== 'відмінено');
+  const going = list.filter(t => t.status === 'в дорозі' || t.status === 'на місці').length;
+  const done = list.filter(t => t.status === 'завершено').length;
+  const fresh = list.filter(t => badgeOf(t)).length;
+  const stat = (n, l, key, warn) => h('button', { class: 'stat' + (warn && n ? ' warn' : '') + (S.filter === key ? ' on' : ''), onclick: () => { S.filter = S.filter === key ? '' : key; render(); } }, h('b', { class: 'num' }, n), l);
+  main.append(h('div', { class: 'stats' },
+    stat(list.length, 'поїздок', ''), stat(going, 'в дорозі', 'go'), stat(done, 'завершено', 'done'),
+    stat(cf.size, 'конфлікти', 'cf', true), stat(noCar.length, 'без авто', 'nocar', true), fresh ? stat(fresh, 'нові/змінені', 'new') : null));
+
+  if (S.filter === 'go') list = list.filter(t => t.status === 'в дорозі' || t.status === 'на місці');
+  if (S.filter === 'done') list = list.filter(t => t.status === 'завершено');
+  if (S.filter === 'cf') list = list.filter(t => cf.has(t.uid));
+  if (S.filter === 'nocar') list = noCar;
+  if (S.filter === 'new') list = list.filter(t => badgeOf(t));
+
+  if (S.view === 'timeline') return timeline(main, list, cf, day);
+  if (S.view === 'cars') return carsView(main, d.trips.filter(t => t.date === day));
+
+  const q = h('input', { class: 'inp search', type: 'search', placeholder: 'Пошук: прізвище, готель, делегація, авто', value: S.q, oninput: e => { S.q = e.target.value; drawList(); } });
+  const box = h('div');
+  main.append(q, box);
+  function drawList() {
+    const needle = S.q.trim().toLowerCase();
+    const l = needle ? list.filter(t => [t.from, t.to, t.people, t.deleg, t.car, t.resp, t.flight, t.note, t.route].join(' ').toLowerCase().includes(needle)) : list;
+    box.replaceChildren(...(l.length ? l.map(t => tripCard(t, true, cf.has(t.uid))) : [h('div', { class: 'empty' }, h('b', null, 'Нічого не знайдено'))]));
+  }
+  drawList();
+  fab(main, day);
+}
+
+function fab(main, day) {
+  document.body.append(h('button', { class: 'fab', id: 'fab', onclick: () => editSheet({ date: day, status: 'призначено' }) }, ico('plus'), 'Поїздка'));
+}
+
+function timeline(main, list, cf, day) {
+  const d = S.data;
+  const spans = list.map(span).filter(Boolean);
+  let h0 = 6, h1 = 22;
+  if (spans.length) { h0 = Math.min(h0, Math.floor(Math.min(...spans.map(s => s[0])) / 60)); h1 = Math.max(h1, Math.ceil(Math.max(...spans.map(s => s[1])) / 60)); }
+  h1 = Math.min(h1, 26);
+  const PX = innerWidth < 600 ? 1.3 : 1.7, W = (h1 - h0) * 60 * PX;
+  const codes = [...(d.cars || []).map(c => c.code)];
+  list.forEach(t => { if (t.car && !codes.includes(t.car)) codes.push(t.car); });
+  const rows = codes.map(code => [code, list.filter(t => t.car === code)]).filter(([code, l]) => l.length || !S.filter);
+  const noCar = list.filter(t => !t.car);
+  if (noCar.length) rows.unshift(['', noCar]);
+
+  const grid = h('div', { class: 'tl-grid', style: 'width:' + (96 + W) + 'px' });
+  const hours = h('div', { class: 'tl-hours' }, h('div', { style: 'width:96px;border-left:0;position:sticky;left:0;background:var(--card);z-index:3' }));
+  for (let x = h0; x < h1; x++) hours.append(h('div', { style: 'width:' + 60 * PX + 'px' }, String(x % 24).padStart(2, '0') + ':00'));
+  grid.append(hours);
+  for (const [code, l] of rows) {
+    const car = (d.cars || []).find(c => c.code === code);
+    const lane = h('div', { class: 'tl-lane', style: 'width:' + W + 'px;background-image:repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px ' + 60 * PX + 'px)' });
+    // розкладка по доріжках, щоб блоки не накладались
+    const tracks = [];
+    l.slice().sort(byTime).forEach(t => {
+      const s = span(t); if (!s) return;
+      let k = tracks.findIndex(end => end <= s[0]); if (k < 0) { k = tracks.length; tracks.push(0); }
+      tracks[k] = s[1];
+      const left = (s[0] - h0 * 60) * PX, width = Math.max((s[1] - s[0]) * PX - 3, 46);
+      lane.append(h('button', {
+        class: 'tl-blk' + (cf.has(t.uid) ? ' cf' : '') + (t.status === 'відмінено' ? ' x' : ''),
+        style: `left:${left}px;width:${width}px;top:${6 + k * 50}px;height:46px;background:${ST_COL[t.status] || 'var(--st-pr)'}`,
+        title: `${fmtT(t.tFrom)} ${t.from} → ${t.to}`,
+        onclick: () => detailSheet(t, cf.has(t.uid))
+      }, h('b', { class: 'num' }, fmtT(t.tFrom) + (badgeOf(t) ? ' •' : '')), shortPt(t.from) + ' → ' + shortPt(t.to)));
+    });
+    lane.style.minHeight = (12 + Math.max(1, tracks.length) * 50) + 'px';
+    grid.append(h('div', { class: 'tl-row' },
+      h('div', { class: 'tl-lab' }, code ? [h('b', null, code), h('span', null, car ? shortName(car.driver) : '—')] : h('b', { style: 'color:var(--red)' }, 'Без авто')), lane));
+  }
+  if (day === d.today) {
+    const now = new Date(), nm = now.getHours() * 60 + now.getMinutes();
+    if (nm >= h0 * 60 && nm <= h1 * 60) grid.append(h('div', { class: 'tl-now', style: 'left:' + (96 + (nm - h0 * 60) * PX) + 'px' }));
+  }
+  const sc = h('div', { class: 'tl-scroll' }, grid);
+  main.append(h('div', { class: 'tl' }, sc));
+  if (!list.length) main.append(h('div', { class: 'empty' }, h('b', null, 'На цей день поїздок немає')));
+  requestAnimationFrame(() => {
+    const first = spans.length ? Math.min(...spans.map(s => s[0])) : 8 * 60;
+    const now = new Date().getHours() * 60 + new Date().getMinutes();
+    const upcoming = spans.filter(s => s[1] >= now).map(s => s[0]);
+    const target = day === d.today && upcoming.length ? Math.max(Math.min(...upcoming), now - 60) - 30 : first - 30;
+    sc.scrollLeft = Math.max(0, (target - h0 * 60) * PX);
+  });
+  fab(main, day);
+}
+function shortPt(p) { return String(p || '—').replace(URL_RE, '').split(/[,(]/)[0].trim().slice(0, 28); }
+function shortName(n) { const p = String(n || '').split(/\s+/); return p.length > 1 ? p[0] + ' ' + p[1][0] + '.' : n; }
+
+function carsView(main, list) {
+  const d = S.data;
+  const box = h('div', { class: 'carl' });
+  (d.cars || []).forEach(c => {
+    const l = list.filter(t => t.car === c.code && t.status !== 'відмінено').sort(byTime);
+    const cur = l.find(t => t.status === 'в дорозі' || t.status === 'на місці');
+    const next = l.find(t => t.status === 'призначено' || t.status === 'прийнято');
+    box.append(h('div', { class: 'card' },
+      h('div', { class: 'ci' },
+        h('b', null, c.code + ' · ' + (c.driver || '—')),
+        h('span', null, [c.car, c.color, c.seats ? c.seats + ' місць' : ''].filter(Boolean).join(' · ')),
+        h('div', { style: 'margin-top:6px;font-size:14px' },
+          cur ? h('span', { class: 'chip st', style: 'background:' + ST_COL[cur.status] }, cur.status + ' · ' + fmtT(cur.tFrom) + ' ' + shortPt(cur.to)) :
+            next ? h('span', { class: 'chip' }, 'далі: ' + fmtT(next.tFrom) + ' ' + shortPt(next.from)) : h('span', { class: 'chip' }, 'вільний'),
+          ' ', h('span', { class: 'chip' }, l.length + ' поїзд.'))),
+      c.phone ? h('a', { class: 'ib', href: tel(c.phone), 'aria-label': 'Подзвонити', html: I.ph }) : null));
+  });
+  main.append(box);
+  fab(main, S.day || d.today);
+}
+
+function detailSheet(t, conflict) {
+  markSeen(t);
+  sheet(fmtT(t.tFrom) + ' · ' + (t.car || 'без авто'), [tripCard(t, true, conflict)], []);
+}
+
+function editSheet(t) {
+  const d = S.data, isNew = !t.uid;
+  const f = {};
+  const inp = (k, label, attrs = {}) => { f[k] = h('input', { class: 'inp', value: t[k] || '', ...attrs }); return h('label', { class: 'fld' }, h('span', null, label), f[k]); };
+  const sel = (k, label, opts) => {
+    f[k] = h('select', { class: 'inp' }, opts.map(([v, l]) => h('option', { value: v }, l)));
+    f[k].value = t[k] || opts[0][0];
+    return h('label', { class: 'fld' }, h('span', null, label), f[k]);
+  };
+  const points = [...new Set(d.trips.flatMap(x => [x.from, x.to]).filter(Boolean))].slice(0, 300);
+  const dl = h('datalist', { id: 'pts' }, points.map(p => h('option', { value: p })));
+  const dlD = h('datalist', { id: 'dels' }, (d.delegations || []).map(p => h('option', { value: p })));
+  f.note = h('textarea', { class: 'inp' }); f.note.value = t.note || '';
+  f.route = h('textarea', { class: 'inp', style: 'min-height:60px' }); f.route.value = t.route || '';
+  f.people = h('textarea', { class: 'inp', style: 'min-height:60px' }); f.people.value = t.people || '';
+  const body = [dl, dlD,
+    h('div', { class: 'grid2' },
+      inp('date', 'Дата', { type: 'date' }),
+      sel('type', 'Тип', [['', '—'], ...(d.types || []).map(x => [x, x])])),
+    h('div', { class: 'grid2' },
+      inp('tFrom', 'Час подачі', { placeholder: '08:30', inputmode: 'numeric' }),
+      inp('tTo', 'Час прибуття', { placeholder: '09:15', inputmode: 'numeric' })),
+    inp('from', 'Точка подачі', { list: 'pts', placeholder: 'ПУ, готель, аеропорт…' }),
+    inp('to', 'Точка призначення', { list: 'pts' }),
+    sel('car', 'Авто', [['', '— не призначено —'], ...(d.cars || []).map(c => [c.code, c.code + ' · ' + (c.driver || '') + (c.seats ? ' · ' + c.seats + ' м.' : '')])]),
+    h('div', { class: 'grid2' }, inp('pax', 'Осіб', { inputmode: 'numeric' }), inp('flight', 'Рейс', { placeholder: 'LO389, 11:25' })),
+    h('label', { class: 'fld' }, h('span', null, 'Склад (прізвища)'), f.people),
+    inp('deleg', 'Делегація', { list: 'dels' }),
+    h('div', { class: 'grid2' }, inp('resp', 'Відповідальний'), inp('contact', 'Контакт на місці (тел.)', { type: 'tel' })),
+    h('label', { class: 'fld' }, h('span', null, 'Коментар по маршруту / посилання на карту'), f.route),
+    h('label', { class: 'fld' }, h('span', null, 'Оперативний коментар'), f.note),
+    sel('status', 'Статус', (d.statuses || []).map(x => [x, x]))];
+  if (t.car && !(d.cars || []).some(c => c.code === t.car)) f.car.append(h('option', { value: t.car }, t.car)), (f.car.value = t.car);
+  const collect = () => { const o = { uid: t.uid }; for (const [k, el] of Object.entries(f)) o[k] = el.value.trim(); return o; };
+  const save = async (btn, extra) => {
+    const o = { ...collect(), ...extra };
+    if (!o.date || !(o.from || o.to)) return toast('Вкажіть дату і хоча б одну точку');
+    btn.disabled = true;
+    try { await api('save', { trip: o }); closeSheet(); toast(isNew ? 'Поїздку додано' : 'Збережено'); S.day = o.date; await load(); }
+    catch (x) { toast(x.message); btn.disabled = false; }
+  };
+  const foot = [h('button', { class: 'btn', onclick: e => save(e.currentTarget) }, isNew ? 'Додати' : 'Зберегти')];
+  if (!isNew) {
+    foot.unshift(h('button', { class: 'btn ghost', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: () => { closeSheet(); editSheet({ ...collect(), uid: '', car: '', status: 'призначено' }); } }, 'Копія'));
+    if (t.status !== 'відмінено') foot.unshift(h('button', { class: 'btn danger', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: e => { if (confirm('Позначити поїздку як відмінену?')) save(e.currentTarget, { status: 'відмінено' }); } }, 'Відмінити'));
+  }
+  sheet(isNew ? 'Нова поїздка' : 'Поїздка ' + fmtT(t.tFrom), body, foot);
+}
+
+// ====== bottom sheet ======
+function sheet(title, body, foot) {
+  closeSheet();
+  const ov = h('div', { class: 'ov', id: 'ov', onclick: e => { if (e.target === ov) closeSheet(); } },
+    h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' },
+      h('div', { class: 'sh-h' }, h('h3', null, title), h('button', { class: 'ib', 'aria-label': 'Закрити', html: I.x, onclick: closeSheet })),
+      h('div', { class: 'sh-b' }, body),
+      foot && foot.length ? h('div', { class: 'sh-f' }, foot) : null));
+  document.body.append(ov);
+  document.body.style.overflow = 'hidden';
+}
+function closeSheet() { $('#ov')?.remove(); document.body.style.overflow = ''; }
+
+// ====== старт ======
+const _render = render;
+render = function () { $('#fab')?.remove(); return _render(); };
+if (S.token) { render(); load(); } else renderLogin();
+setInterval(() => { if (S.token && document.visibilityState === 'visible' && !$('#ov')) load(); }, POLL_MS);
+document.addEventListener('visibilitychange', () => { if (S.token && document.visibilityState === 'visible' && Date.now() - (S.loadedAt || 0) > 20000) load(); });
+addEventListener('online', () => S.token && load());
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
