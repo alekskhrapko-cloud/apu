@@ -184,6 +184,17 @@ a.btn{display:flex;align-items:center;justify-content:center;text-decoration:non
 .sh-f{flex-wrap:wrap}
 .sh-f .btn{flex:1 1 auto;min-width:110px}
 .imgprev img{width:100%;border-radius:14px;box-shadow:var(--sh);margin-bottom:10px}
+.geobar{display:flex;align-items:center;gap:12px;background:var(--card);box-shadow:var(--sh);border-radius:14px;padding:10px 14px;margin:8px 0}
+.geobar.on{outline:2px solid var(--st-done)}
+.switch{width:52px;height:32px;border-radius:999px;border:0;background:var(--line);position:relative;cursor:pointer;flex:0 0 auto}
+.switch i{position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .15s}
+.switch.on{background:var(--st-done)}
+.switch.on i{left:23px}
+.mapbox{height:calc(100dvh - 330px);min-height:360px;border-radius:var(--r);overflow:hidden;box-shadow:var(--sh);margin-top:6px;background:var(--soft)}
+.maplist{margin-top:10px}
+.pin{display:inline-block;color:#fff;font:700 12px/1 -apple-system,sans-serif;padding:7px 8px;border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,.35);border:2px solid #fff;white-space:nowrap;transform:translate(0,0)}
+.pin.stale{opacity:.5}
+.pop{font-size:13px;display:grid;gap:4px;min-width:200px}
 .carimg{width:64px;height:64px;border-radius:12px;object-fit:cover;flex:0 0 auto}
 .toast{position:fixed;left:50%;bottom:calc(90px + var(--safe-b));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;z-index:60;max-width:90vw}
 @media (min-width:900px){.ov{align-items:center}.sheet{border-radius:20px}}
@@ -191,6 +202,7 @@ a.btn{display:flex;align-items:center;justify-content:center;text-decoration:non
 </head>
 <body>
 <div id="app"></div>
+<script src="car3d.js"></script>
 <script>
 'use strict';
 // ====== КОНФІГ ======
@@ -350,6 +362,7 @@ const S = {
 };
 
 function logout(msg) {
+  if (geoOn() && S.token) { try { geoStop(true); } catch {} ls.set('geo', false); }
   ['token', 'user', 'data', 'loadedAt', 'seen'].forEach(ls.del);
   Object.assign(S, { token: null, user: null, data: null, seen: null });
   renderLogin(msg || '');
@@ -360,6 +373,7 @@ async function load(range) {
   S.loading = true; paintBusy();
   try {
     const d = await api('data', range || (S.user?.admin && S.data ? { from: S.data.from, to: S.data.to } : {}));
+    if (!range) notifyNew(S.data, d);
     S.data = d; S.user = d.user; S.loadedAt = Date.now(); S.error = ''; S.offline = false;
     if (!S.day || (S.day < d.from || S.day > d.to)) S.day = d.today;
     if (!S.seen) { S.seen = {}; d.trips.forEach(t => S.seen[t.uid] = tripHash(t)); ls.set('seen', S.seen); }
@@ -373,6 +387,20 @@ async function load(range) {
 }
 function paintBusy() { const b = $('#refresh'); if (b) b.classList.toggle('spin', S.loading); }
 function markSeen(t) { S.seen = S.seen || {}; S.seen[t.uid] = tripHash(t); ls.set('seen', S.seen); }
+// Сповіщення, поки застосунок відкритий: нові/змінені поїздки → вібрація, звук, системне сповіщення.
+function notifyNew(before, after) {
+  if (!before) return;
+  const old = new Map(before.trips.map(t => [t.uid, tripHash(t)]));
+  const fresh = after.trips.filter(t => t.status !== 'завершено' && (!old.has(t.uid) || old.get(t.uid) !== tripHash(t)));
+  if (!fresh.length) return;
+  const t = fresh[0];
+  const title = (old.has(t.uid) ? 'Змінено поїздку' : 'Нова поїздка') + (fresh.length > 1 ? ' (+' + (fresh.length - 1) + ')' : '');
+  const body = dayTitle(t.date, after.today) + ' · ' + fmtT(t.tFrom) + ' · ' + cleanPt(t.from) + (t.to ? ' → ' + cleanPt(t.to) : '');
+  try { navigator.vibrate?.([200, 100, 200]); } catch {}
+  try { const a = new (window.AudioContext || window.webkitAudioContext)(), o = a.createOscillator(), g = a.createGain(); o.frequency.value = 880; g.gain.value = .08; o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + .25); } catch {}
+  if ('Notification' in window && Notification.permission === 'granted') navigator.serviceWorker?.ready.then(r => r.showNotification(title, { body, tag: 'apu-' + t.uid, icon: 'icon-192.png' })).catch(() => {});
+  toast(title + ': ' + body);
+}
 function badgeOf(t) {
   if (!S.seen) return null;
   if (!(t.uid in S.seen)) return 'НОВЕ';
@@ -443,18 +471,60 @@ function carsLine() {
   return cars.map(c => c.car || c.code).join(', ');
 }
 
+// ====== ПОЗИЦІЯ ВОДІЯ ======
+// Водій сам вмикає. Поки застосунок відкритий — надсилаємо позицію раз на ~30 с або при русі >150 м.
+const GEO = { watch: null, last: null, err: '' };
+function geoOn() { return !!ls.get('geo', false); }
+function geoStart() {
+  if (!navigator.geolocation || GEO.watch != null) return;
+  GEO.watch = navigator.geolocation.watchPosition(p => {
+    GEO.err = '';
+    const now = Date.now(), c = p.coords, L = GEO.last;
+    const moved = L ? distM(L.lat, L.lng, c.latitude, c.longitude) : 1e9;
+    if (!L || now - L.t > 30000 || moved > 150) {
+      GEO.last = { t: now, lat: c.latitude, lng: c.longitude };
+      api('pos', { lat: c.latitude, lng: c.longitude, acc: c.accuracy, spd: c.speed || 0 }).catch(() => {});
+      const el = $('#geo-ago'); if (el) el.textContent = 'щойно';
+    }
+  }, e => { GEO.err = e.code === 1 ? 'Дозвольте геолокацію для цього сайту в налаштуваннях' : 'Не вдається визначити позицію'; const el = $('#geo-ago'); if (el) el.textContent = GEO.err; },
+  { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 });
+}
+function geoStop(sendOff) {
+  if (GEO.watch != null) navigator.geolocation.clearWatch(GEO.watch);
+  GEO.watch = null; GEO.last = null;
+  if (sendOff) api('pos', { off: true }).catch(() => {});
+}
+function geoPing(why) { // разова позиція при кроці водія
+  if (!geoOn() || !navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(p => api('pos', { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, spd: p.coords.speed || 0, why }).catch(() => {}), () => {}, { maximumAge: 30000, timeout: 15000 });
+}
+function distM(a, b, c, d) { const R = 6371e3, t = Math.PI / 180, x = (d - b) * t * Math.cos((a + c) / 2 * t), y = (c - a) * t; return Math.hypot(x, y) * R; }
+function geoBar() {
+  const on = geoOn();
+  return h('div', { class: 'geobar' + (on ? ' on' : '') },
+    h('div', { style: 'flex:1;min-width:0' },
+      h('b', null, on ? 'Позиція передається координатору' : 'Позиція не передається'),
+      h('div', { class: 'muted', style: 'font-size:12px' }, on ? h('span', { id: 'geo-ago' }, GEO.err || 'поки застосунок відкритий на екрані') : 'Увімкніть на час роботи, щоб координатор бачив авто на карті')),
+    h('button', { class: 'switch' + (on ? ' on' : ''), 'aria-label': 'Передавати позицію', onclick: () => {
+      if (on) { ls.set('geo', false); geoStop(true); } else { ls.set('geo', true); geoStart(); }
+      render();
+    } }, h('i')));
+}
+
 // ====== ВОДІЙ ======
 function renderDriver(main) {
   const d = S.data, today = d.today;
   const coords = d.coordinators || [];
   if (coords.length) main.append(h('div', { class: 'calls' }, coords.map(c => h('a', { href: tel(c.phone) }, ico('ph'), h('span', null, 'Координатор: ' + c.name)))));
+  main.append(geoBar());
   const hero = heroTrip(d.trips, today);
   if (hero) main.append(heroCard(hero, today));
   const left = d.trips.filter(t => t.date === today && !['завершено', 'відмінено'].includes(t.status)).sort(byTime);
   const dayRoute = left.length > 1 ? routeHref(left.flatMap(t => [t.from, t.to])) : null;
   main.append(h('div', { class: 'tools' },
     dayRoute ? h('a', { class: 'tool', href: dayRoute, target: '_blank', rel: 'noopener' }, ico('nav'), 'Маршрут на сьогодні (' + left.length + ' поїзд.)') : null,
-    h('button', { class: 'tool', onclick: () => { ls.set('maps', mapsApp() === 'google' ? 'apple' : 'google'); render(); } }, 'Навігація: ' + (mapsApp() === 'google' ? 'Google Maps' : 'Apple Maps'))));
+    h('button', { class: 'tool', onclick: () => { ls.set('maps', mapsApp() === 'google' ? 'apple' : 'google'); render(); } }, 'Навігація: ' + (mapsApp() === 'google' ? 'Google Maps' : 'Apple Maps')),
+    'Notification' in window && Notification.permission === 'default' ? h('button', { class: 'tool', onclick: () => Notification.requestPermission().then(() => render()) }, 'Увімкнути сповіщення') : null));
   const days = [today, addDays(today, 1)];
   let any = false;
   for (const day of days) {
@@ -589,6 +659,7 @@ function tripCard(t, coord, conflict) {
 
 async function setStatus(t, st, btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Зберігаю…'; }
+  geoPing(st);
   try {
     await api('status', { uid: t.uid, status: st });
     t.status = st; markSeen(t); ls.set('data', S.data); toast('Статус: ' + st); render();
@@ -621,7 +692,7 @@ function coordBar() {
       h('label', { class: 'd', style: 'position:relative;cursor:pointer', onclick: () => di.showPicker?.() }, dayTitle(day, d.today), di),
       day !== d.today ? h('button', { class: 'ib', onclick: () => goDay(d.today) }, 'Сьогодні') : null,
       h('button', { class: 'ib', 'aria-label': 'Наступний день', html: I.r, onclick: () => goDay(addDays(day, 1)) })),
-    h('div', { class: 'seg' }, [['timeline', 'Шкала'], ['list', 'Список'], ['cars', 'Авто']].map(([k, l]) =>
+    h('div', { class: 'seg' }, [['timeline', 'Шкала'], ['list', 'Список'], ['map', 'Карта'], ['cars', 'Авто']].map(([k, l]) =>
       h('button', { class: S.view === k ? 'on' : '', onclick: () => { S.view = k; ls.set('view', k); render(); } }, l))));
 }
 function goDay(day) {
@@ -671,6 +742,7 @@ function renderCoord(main) {
 
   if (S.view === 'timeline') return timeline(main, list, cf, day);
   if (S.view === 'cars') return carsView(main, d.trips.filter(t => t.date === day));
+  if (S.view === 'map') return mapView(main, d.trips.filter(t => t.date === d.today));
 
   main.append(h('div', { class: 'tools', style: 'margin-top:10px' }, h('button', { class: 'tool', onclick: () => shareSheet(d.trips.filter(t => t.date === day), { day: true }) }, ico('share'), 'Поділитися розкладом дня')));
   const q = h('input', { class: 'inp search', type: 'search', placeholder: 'Пошук: прізвище, готель, делегація, авто', value: S.q, oninput: e => { S.q = e.target.value; drawList(); } });
@@ -764,7 +836,8 @@ function carsView(main, list) {
           ' ', h('span', { class: 'chip' }, l.length + ' поїзд.'))),
       h('div', { style: 'display:flex;flex-direction:column;gap:6px' },
         c.phone ? h('a', { class: 'ib', href: tel(c.phone), 'aria-label': 'Подзвонити', html: I.ph }) : null,
-        l.length ? h('button', { class: 'ib', 'aria-label': 'Поділитися планом водія', html: I.share, onclick: () => shareSheet(l, { plan: c }) }) : null)));
+        l.length ? h('button', { class: 'ib', 'aria-label': 'Поділитися планом водія', html: I.share, onclick: () => shareSheet(l, { plan: c }) }) : null,
+        h('button', { class: 'ib', 'aria-label': '3D-GIF авто', onclick: () => carGifSheet(c), style: 'font-size:12px;font-weight:800' }, 'GIF'))));
   });
   main.append(box);
   fab(main, S.day || d.today);
@@ -863,6 +936,73 @@ function editSheet(t) {
     if (t.status !== 'відмінено') foot.unshift(h('button', { class: 'btn danger', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: e => { if (confirm('Позначити поїздку як відмінену?')) save(e.currentTarget, { status: 'відмінено' }); } }, 'Відмінити'));
   }
   sheet(isNew ? 'Нова поїздка' : 'Поїздка ' + fmtT(t.tFrom), body, foot);
+}
+
+// ====== КАРТА (координатор) ======
+const MAP = { map: null, layer: null, fitted: false, timer: null, pos: [] };
+function loadLeaflet() {
+  if (window.L) return Promise.resolve();
+  return new Promise((res, rej) => {
+    const css = h('link', { rel: 'stylesheet', href: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' }); document.head.append(css);
+    const sc = h('script', { src: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js' }); sc.onload = res; sc.onerror = () => rej(new Error('Не вдалося завантажити карту')); document.head.append(sc);
+  });
+}
+function agoText(ms) { const m = Math.round(ms / 60000); return m < 1 ? 'щойно' : m < 60 ? m + ' хв тому' : Math.floor(m / 60) + ' год ' + (m % 60) + ' хв тому'; }
+async function mapView(main, todays) {
+  const box = h('div', { id: 'mapbox', class: 'mapbox' });
+  const info = h('div', { class: 'maplist' });
+  main.append(h('div', { class: 'hero-hint', style: 'text-align:left;margin:8px 4px' }, 'Авто з’являються, коли водій увімкнув «Передавати позицію» і застосунок відкритий у нього на екрані. Також позиція фіксується при кожному кроці («Їду», «На місці», «Везу»).'), box, info);
+  try { await loadLeaflet(); } catch (e) { box.textContent = e.message; return; }
+  MAP.map?.remove(); MAP.fitted = false;
+  MAP.map = L.map(box, { zoomControl: true }).setView([52.515, 13.39], 11);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(MAP.map);
+  MAP.layer = L.layerGroup().addTo(MAP.map);
+  const draw = () => {
+    MAP.layer.clearLayers(); info.replaceChildren();
+    const now = Date.now(), pts = [];
+    if (!MAP.pos.length) info.append(h('div', { class: 'card', style: 'color:var(--muted)' }, 'Зараз жоден водій не передає позицію.'));
+    MAP.pos.slice().sort((a, b) => b.t - a.t).forEach(p => {
+      const code = (p.cars || [])[0] || '?';
+      const car = (S.data.cars || []).find(c => c.code === code);
+      const trip = todays.filter(t => (p.cars || []).includes(t.car) && t.status !== 'відмінено').sort(byTime);
+      const cur = trip.find(t => ACTIVE.includes(t.status)) || trip.find(t => ['призначено', 'прийнято'].includes(t.status));
+      const stale = now - p.t > 15 * 60000;
+      const col = cur && ACTIVE.includes(cur.status) ? ST_COL[cur.status] : 'var(--st-pr)';
+      const icon = L.divIcon({ className: '', html: '<div class="pin' + (stale ? ' stale' : '') + '" style="background:' + col + '">' + code.replace(/[<>&"]/g, '') + '</div>', iconSize: [64, 28], iconAnchor: [32, 14] });
+      const pop = h('div', { class: 'pop' }, h('b', null, (p.name || code) + ' · ' + code), h('div', null, (car ? car.car + ', ' + (car.color || '') : '')), h('div', { class: 'muted' }, 'оновлено ' + agoText(now - p.t) + (p.spd ? ' · ' + p.spd + ' км/год' : '') + (p.acc ? ' · ±' + p.acc + ' м' : '')),
+        cur ? h('div', null, cur.status + ': ' + fmtT(cur.tFrom) + ' ' + cleanPt(cur.from) + (cur.to ? ' → ' + cleanPt(cur.to) : '')) : h('div', { class: 'muted' }, 'активних поїздок немає'),
+        h('div', { style: 'display:flex;gap:8px;margin-top:6px' }, car?.phone ? h('a', { href: tel(car.phone) }, 'Подзвонити') : null, h('a', { href: 'https://www.google.com/maps/search/?api=1&query=' + p.lat + ',' + p.lng, target: '_blank', rel: 'noopener' }, 'Google Maps')));
+      // Куди їде і коли буде: рахуємо при відкритті картки водія (щоб не витрачати ліміт Google).
+      const target = cur ? (cur.status === 'з пасажирами' ? cur.to : cur.status === 'на місці' ? null : cur.from) : null;
+      const etaDiv = h('div', { class: 'eta', style: 'margin:4px 0 0' }, cur?.status === 'на місці' ? 'Водій на місці подачі' : target ? 'Рахую час прибуття…' : '');
+      pop.insertBefore(etaDiv, pop.lastChild);
+      const calc = async () => {
+        if (!target) return;
+        try {
+          const r = await getEta(p.lat.toFixed(4) + ',' + p.lng.toFixed(4), etaQuery(target), '', '');
+          const [lo, hi] = etaRange(r.trafficSec || r.sec); const n = nowMin();
+          const plan = cur.status === 'з пасажирами' ? mins(cur.tTo) : mins(cur.tFrom);
+          const late = plan != null && n + hi > plan;
+          etaDiv.replaceChildren(h('div', null, h('b', null, (cur.status === 'з пасажирами' ? 'До призначення' : 'До подачі') + ' ≈ ' + lo + '–' + hi + ' хв')),
+            h('div', null, 'Прибуття ≈ ' + hhmm((n + lo) % 1440) + '–' + hhmm((n + hi) % 1440) + (plan != null ? ' (план ' + hhmm(plan) + ')' : ''), late ? h('b', { style: 'color:var(--red)' }, ' · може запізнитися') : ''),
+            h('div', { class: 'muted' }, cleanPt(target) + (r.meters ? ' · ' + (r.meters / 1000).toFixed(1) + ' км' : '')));
+        } catch (e) { etaDiv.textContent = e.message; }
+      };
+      const mk = L.marker([p.lat, p.lng], { icon }).bindPopup(pop).addTo(MAP.layer);
+      mk.on('popupopen', calc);
+      p._mk = mk;
+      if (p.acc && p.acc < 2000) L.circle([p.lat, p.lng], { radius: p.acc, weight: 1, opacity: .4, fillOpacity: .06 }).addTo(MAP.layer);
+      pts.push([p.lat, p.lng]);
+      info.append(h('div', { class: 'card', style: 'display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px', onclick: () => { MAP.map.setView([p.lat, p.lng], 14); p._mk.openPopup(); } },
+        h('span', { class: 'chip st', style: 'background:' + col }, code), h('div', { style: 'flex:1;min-width:0' }, h('b', null, p.name || code), h('div', { class: 'muted', style: 'font-size:13px' }, agoText(now - p.t) + (cur ? ' · ' + cur.status + ' ' + fmtT(cur.tFrom) + ' → ' + cleanPt(cur.status === 'з пасажирами' ? cur.to : cur.from).slice(0, 34) : ''))),
+        car?.phone ? h('a', { class: 'ib', href: tel(car.phone), html: I.ph, onclick: e => e.stopPropagation() }) : null));
+    });
+    if (pts.length && !MAP.fitted) { MAP.map.fitBounds(pts, { padding: [40, 40], maxZoom: 14 }); MAP.fitted = true; }
+  };
+  const poll = async () => { try { const r = await api('positions'); MAP.pos = r.positions || []; draw(); } catch (e) { info.replaceChildren(h('div', { class: 'card' }, e.message)); } };
+  clearInterval(MAP.timer); MAP.timer = setInterval(() => { if (S.view === 'map' && document.visibilityState === 'visible' && $('#mapbox')) poll(); else clearInterval(MAP.timer); }, 20000);
+  setTimeout(() => MAP.map.invalidateSize(), 50);
+  poll();
 }
 
 // ====== ПОДІЛИТИСЯ ======
@@ -999,6 +1139,26 @@ async function tripImage(t, o) {
   out.getContext('2d').drawImage(cv, 0, 0);
   return new Promise(res => out.toBlob(b => res(b), 'image/png'));
 }
+function carGifFor(car, trip, o = {}) {
+  const lines = [['Водій', car.driver], ['Телефон', o.phone === false ? '' : fmtPhone(car.phone)]];
+  if (trip) { lines.push(['Подача', cleanPt(trip.from)]); if (o.buf > 0 && mins(trip.tFrom) != null) lines.push(['Чекатиме з', hhmm(mins(trip.tFrom) - o.buf)]); }
+  return Car3D.carGif({
+    kind: kindOf(car), color: colorOf(car), title: modelOf(car) || car.code, subtitle: car.color, plate: plateOf(car), lines,
+    top: trip ? { big: fmtT(trip.tFrom) + ' · ' + DOW_S[dObj(trip.date).getDay()] + ' ' + dObj(trip.date).getDate() + ' ' + MON[dObj(trip.date).getMonth()], small: 'Трансфер · ' + cleanPt(trip.from).slice(0, 40) } : { big: 'Ваше авто', small: car.driver || '' }
+  });
+}
+function carGifSheet(car) {
+  const st = h('div', { class: 'hero-hint', style: 'text-align:left' }, 'Готую 3D-GIF…'); const pv = h('div', { class: 'imgprev', style: 'max-width:360px;margin:0 auto' });
+  let file = null;
+  const share = h('button', { class: 'btn', disabled: true, onclick: async () => { try { await navigator.share({ files: [file] }); } catch (e) { if (e.name !== 'AbortError') toast(e.message); } } }, 'Поділитися…');
+  const dl = h('a', { class: 'btn ghost', href: '#', download: 'avto-' + car.code + '.gif' }, 'Завантажити');
+  sheet('3D-GIF · ' + car.code, [pv, st], [navigator.share ? share : null, dl]);
+  carGifFor(car, null, { phone: true }).then(blob => {
+    file = new File([blob], 'avto-' + String(car.code).replace(/\W/g, '') + '.gif', { type: 'image/gif' });
+    const u = URL.createObjectURL(blob); pv.replaceChildren(h('img', { src: u, alt: 'Авто' })); dl.href = u;
+    st.textContent = Math.round(blob.size / 1024) + ' КБ · можна переслати в WhatsApp'; share.disabled = !navigator.canShare?.({ files: [file] });
+  }).catch(e => { st.textContent = e.message; });
+}
 function waHref(text, phone) { return 'https://wa.me/' + (phone ? String(phone).replace(/\D/g, '') : '') + '?text=' + encodeURIComponent(text); }
 
 function dayText(list, o) {
@@ -1034,16 +1194,29 @@ function shareSheet(list, opt = {}) {
     imgFile = new File([blob], 'transfer-' + list[0].date + '-' + fmtT(list[0].tFrom).replace(':', '') + '.png', { type: 'image/png' });
     prev.replaceChildren(h('img', { src: URL.createObjectURL(blob), alt: 'Картка поїздки' }));
   };
-  if (single) { body.unshift(prev); makeImg(); [...body].forEach(el => el?.querySelectorAll?.('input,button').forEach(i => i.addEventListener('click', () => setTimeout(makeImg, 50)))); }
+  let gifFile = null; const gifState = h('div', { class: 'hero-hint', style: 'text-align:left' });
+  const makeGif = async () => {
+    if (!single || !car) return;
+    gifFile = null; gifState.textContent = 'Готую 3D-GIF…'; const gb = $('#gifbtn'); if (gb) gb.disabled = true;
+    try {
+      const blob = await carGifFor(car, list[0], o);
+      gifFile = new File([blob], 'avto-' + (car.code || 'car').replace(/\W/g, '') + '-' + fmtT(list[0].tFrom).replace(':', '') + '.gif', { type: 'image/gif' });
+      gifState.replaceChildren('3D-GIF готовий (' + Math.round(blob.size / 1024) + ' КБ). ', h('a', { href: URL.createObjectURL(blob), target: '_blank' }, 'Переглянути'));
+      const b2 = $('#gifbtn'); if (b2) b2.disabled = false;
+    } catch (e) { gifState.textContent = 'GIF: ' + e.message; }
+  };
+  if (single) { body.unshift(prev, gifState); makeImg(); setTimeout(makeGif, 300); [...body].forEach(el => el?.querySelectorAll?.('input,button').forEach(i => i.addEventListener('click', () => setTimeout(() => { makeImg(); makeGif(); }, 50)))); }
   const shareNative = async (withImg) => {
     const data = { text: ta.value };
-    if (withImg && imgFile && navigator.canShare?.({ files: [imgFile] })) data.files = [imgFile];
+    const f = withImg === 'gif' ? gifFile : imgFile;
+    if (withImg && f && navigator.canShare?.({ files: [f] })) data.files = [f];
     try { await navigator.share(data); } catch (e) { if (e.name !== 'AbortError') copy(); }
   };
   const foot = [
     h('a', { class: 'btn wa', href: '#', onclick: e => { e.currentTarget.href = waHref(ta.value); }, target: '_blank', rel: 'noopener' }, 'WhatsApp'),
     car?.phone ? h('a', { class: 'btn ghost', href: '#', onclick: e => { e.currentTarget.href = waHref(ta.value, car.phone); }, target: '_blank', rel: 'noopener', style: 'flex:0 0 auto;width:auto;padding:0 14px' }, 'Водію') : null,
-    navigator.share ? h('button', { class: 'btn', onclick: () => shareNative(true) }, single ? 'З картинкою…' : 'Поділитися…') : null,
+    navigator.share ? h('button', { class: 'btn', onclick: () => shareNative(true) }, single ? 'Картка…' : 'Поділитися…') : null,
+    navigator.share && single && car ? h('button', { class: 'btn', id: 'gifbtn', disabled: true, onclick: () => shareNative('gif') }, '3D-GIF…') : null,
     h('button', { class: 'btn ghost', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: copy }, 'Копіювати')];
   sheet(opt.day ? 'Розклад дня' : opt.plan ? 'План водія' : 'Поділитися поїздкою', body, foot);
 }
@@ -1064,7 +1237,8 @@ function closeSheet() { $('#ov')?.remove(); document.body.style.overflow = ''; }
 // ====== старт ======
 const _render = render;
 render = function () { $('#fab')?.remove(); return _render(); };
-if (S.token) { render(); load(); } else renderLogin();
+if (S.token) { render(); load(); if (geoOn() && !S.user?.admin) geoStart(); } else renderLogin();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && geoOn() && S.token && !S.user?.admin) { geoStop(false); geoStart(); } });
 setInterval(() => { if (S.token && document.visibilityState === 'visible' && !$('#ov')) load(); }, POLL_MS);
 document.addEventListener('visibilitychange', () => { if (S.token && document.visibilityState === 'visible' && Date.now() - (S.loadedAt || 0) > 20000) load(); });
 addEventListener('online', () => S.token && load());
