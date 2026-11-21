@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=40">
+<link rel="stylesheet" href="style.css?v=41">
 </head>
 <body>
 <div id="app"></div>
@@ -1403,7 +1403,7 @@ function timeWheel(input, defFn) {
         while (Math.abs(acc) >= 1) { const dir = Math.sign(acc); acc -= dir; stepBy(c, dir); }
       }, { passive: false });
       c.addEventListener('click', e => { const it = e.target.closest('.tw-i'); if (it) glide(c, items(c).indexOf(it)); });
-      c.addEventListener('keydown', e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); stepBy(c, e.key === 'ArrowDown' ? 1 : -1); } if (e.key === 'Enter' || e.key === 'Escape') close(); });
+      c.addEventListener('keydown', e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); stepBy(c, e.key === 'ArrowDown' ? 1 : -1); } if (e.key === 'Enter' || e.key === 'Escape') { e.stopPropagation(); close(); } });
     });
     const quick = h('div', { class: 'tw-q' }, ...[[-15, '−15'], [-5, '−5'], [5, '+5'], [15, '+15']].map(([dlt, l]) => h('button', { type: 'button', onclick: () => {
       const cur = idx(hc) * 60 + idx(mc) * 5 + dlt, v = ((cur % 1440) + 1440) % 1440;
@@ -1421,7 +1421,7 @@ function timeWheel(input, defFn) {
   };
   input.addEventListener('click', open);
   input.addEventListener('focus', () => { if (IS_TOUCH || !input.value) open(); });
-  input.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  input.addEventListener('keydown', e => { if (e.key === 'Escape' && pop) { e.stopPropagation(); close(); } });
 }
 function seatsW(n) { n = Number(n); const m = n % 10, c = n % 100; return n + ' ' + (m === 1 && c !== 11 ? 'місце' : m >= 2 && m <= 4 && (c < 12 || c > 14) ? 'місця' : 'місць'); }
 function samePt(a, b) { a = cleanPt(a).toLowerCase(); b = cleanPt(b).toLowerCase(); return !!a && a === b; }
@@ -1857,9 +1857,8 @@ const PLACES = [
     { title: 'Огляд авто і формування кортежу', text: 'Майданчик на схід від павільйону Halle C (виділено червоним на схемі). Огляд — за часом із програми (зазвичай о 06:00). Ножі, мультитули, газові балончики тощо не брати — залишити в Посольстві.', lat: 52.3524375, lng: 13.479171875, zoom: 17, media: 'GOV1' }
   ] },
   { id: 'govpark', name: 'Урядовий термінал: паркінг', short: 'Паркінг УТ', sub: 'Де стати, якщо треба чекати делегацію', lat: 52.38202755852296, lng: 13.507701345193405, icon: 'park', minor: true },
-  { id: 'govdrop', name: 'Урядовий термінал: висадка (до шлагбаума)', short: 'Висадка УТ', sub: 'Висаджувати й забирати пасажирів до шлагбаума', lat: 52.38153926641489, lng: 13.508337424710087, icon: 'drop', minor: true },
-  { id: 'ber', name: 'BER, паркінг для звичайних рейсів', short: 'BER, паркінг', sub: 'Willy-Brandt-Platz, проїзд між Steigenberger Airport Hotel і сусідньою будівлею. Коли зустріч не через урядовий термінал', lat: 52.364082091037915, lng: 13.512449601286436, icon: 'park', guide: [
-    { title: 'Де стати', text: 'Паркуватися в смузі вздовж проїзду (виділено жовтим) — не далі. Звідси пішки до виходу прильоту.', media: 'BERP1', lat: 52.364082091037915, lng: 13.512449601286436, zoom: 19 }
+  { id: 'ber', name: 'BER, паркінг для звичайних рейсів', short: 'BER, паркінг', sub: 'Willy-Brandt-Platz: проїзд між Steigenberger Airport Hotel та IntercityHotel. Коли зустріч не через урядовий термінал', lat: 52.364082091037915, lng: 13.512449601286436, icon: 'park', guide: [
+    { title: 'Де стати', text: 'Паркуватися можна в усьому проїзді між Steigenberger Airport Hotel та IntercityHotel (виділено жовтим): від Willy-Brandt-Platz до Margarete-von-Etzdorf-Straße. Звідси пішки до терміналу.', media: 'BERP1', lat: 52.364082091037915, lng: 13.512449601286436, zoom: 19 }
   ] }
 ];
 const PLACE_SVG = {
@@ -2506,6 +2505,8 @@ function palette() {
   document.body.append(ov); draw(); setTimeout(() => inp.focus(), 20);
 }
 addEventListener('keydown', e => {
+  // Esc закриває відкрите вікно (якщо не відкритий барабан часу чи пошук — вони закриваються першими).
+  if (e.key === 'Escape' && $('#ov') && !$('.tw:not(.out)') && !$('.pal-ov')) { e.preventDefault(); closeSheet(); return; }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('.pal-ov') ? null : palette(); }
   else if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) && !$('#ov')) { e.preventDefault(); palette(); }
 });
