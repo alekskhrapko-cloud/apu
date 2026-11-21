@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=38">
+<link rel="stylesheet" href="style.css?v=39">
 </head>
 <body>
 <div id="app"></div>
@@ -292,7 +292,7 @@ function notifyNew(before, after) {
   try { navigator.vibrate?.([200, 100, 200]); } catch {}
   try { const a = new (window.AudioContext || window.webkitAudioContext)(), o = a.createOscillator(), g = a.createGain(); o.frequency.value = 880; g.gain.value = .08; o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + .25); } catch {}
   if ('Notification' in window && Notification.permission === 'granted') navigator.serviceWorker?.ready.then(r => r.showNotification(title, { body, tag: 'apu-' + t.uid, icon: 'icon-192.png' })).catch(() => {});
-  toast(title + ': ' + body);
+  if (!document.querySelector('.toast.has-undo')) toast(title + ': ' + body);
 }
 function badgeOf(t) {
   if (!S.seen) return null;
@@ -1486,6 +1486,11 @@ function editSheet(t) {
   f.car.value = t.car || '';
   f.driver = h('select', { class: 'inp' });
   const pick = h('div', { class: 'pick' });
+  // ----- Маршрут із кількома зупинками: А → Б → В… Кожен відрізок збережеться окремим рядком таблиці. -----
+  const stops = [];
+  const boardB = h('input', { class: 'inp', placeholder: 'Прізвища через кому — необов’язково' });
+  const bWrap = h('label', { class: 'fld stop-board', hidden: true }, h('span', null, 'Хто сідає в цій точці'), boardB);
+  const stopsBox = h('div', { class: 'stops' });
   const body = [dl, dlD,
     h('div', { class: 'grid2' },
       inp('date', 'Дата', { type: 'date' }),
@@ -1495,6 +1500,7 @@ function editSheet(t) {
       inp('pax', 'Осіб', { inputmode: 'numeric', placeholder: '1' })),
     inp('from', 'Точка подачі', { list: 'pts', placeholder: 'ПУ, готель, аеропорт…' }),
     inp('to', 'Точка призначення', { list: 'pts' }),
+    bWrap, stopsBox,
     pick,
     h('div', { class: 'grid2' }, sel('type', 'Тип', [['', '—'], ...(d.types || []).map(x => [x, x])]), inp('flight', 'Рейс', { placeholder: 'LO389, 11:25' })),
     h('div', { class: 'fld' }, h('span', null, 'Склад (прізвища)'), peopleBox, pplDl, pplSug, f.people),
@@ -1508,6 +1514,34 @@ function editSheet(t) {
   const collect = () => { const o = { uid: t.uid }; for (const [k, el] of Object.entries(f)) o[k] = el.value.trim(); return o; };
   timeWheel(f.tFrom, () => Math.ceil(nowMin() / 5) * 5);
   timeWheel(f.tTo, () => { const a = mins(f.tFrom.value); return a == null ? Math.ceil(nowMin() / 5) * 5 + 60 : a + 60; });
+  const toLab = f.to.closest('label').querySelector('span');
+  const stopPax = () => !stops.length ? 0 : splitPeople(boardB.value).length + stops.slice(0, -1).reduce((a, x) => a + splitPeople(x.ppl.value).length, 0);
+  const drawStops = () => {
+    bWrap.hidden = !stops.length;
+    toLab.textContent = stops.length ? 'Зупинка 2 (точка Б)' : 'Точка призначення';
+    stopsBox.replaceChildren(...stops.map((x, i) => {
+      const last = i === stops.length - 1;
+      x.lab.textContent = last ? 'Кінцева точка' : 'Зупинка ' + (i + 3);
+      x.pplWrap.hidden = last;
+      return h('div', { class: 'stop', style: '--i:' + i }, h('div', { class: 'stop-h' }, h('span', { class: 'stop-n' }, String.fromCharCode(1042 + i)), x.lab, h('button', { type: 'button', class: 'stop-x', 'aria-label': 'Прибрати зупинку', onclick: () => { stops.splice(i, 1); drawStops(); syncPeople(); } }, '×')),
+        h('div', { class: 'grid2' }, h('label', { class: 'fld' }, h('span', null, 'Точка'), x.pt), h('label', { class: 'fld' }, h('span', null, 'Час прибуття'), x.t)), x.pplWrap);
+    }), h('button', { type: 'button', class: 'chipbtn addstop', onclick: addStop }, stops.length ? '+ Ще зупинка' : '+ Додати зупинку (забрати ще когось по дорозі)'));
+    if (stops.length) stopsBox.append(h('div', { class: 'stop-sum' }, 'Буде ' + (stops.length + 1) + ' поїздки підряд: ' + [f.from.value, f.to.value, ...stops.map(x => x.pt.value)].map(v => shortPt(v || '…')).join(' → ')));
+  };
+  const addStop = () => {
+    const prevT = stops.length ? stops[stops.length - 1].t.value : f.tTo.value || (mins(f.tFrom.value) != null ? hhmm(mins(f.tFrom.value) + 30) : '');
+    if (!stops.length && !f.tTo.value && prevT) f.tTo.value = prevT;
+    const x = { pt: h('input', { class: 'inp', list: 'pts', placeholder: 'Куди далі' }), t: h('input', { class: 'inp', placeholder: '09:30', inputmode: 'numeric' }), ppl: h('input', { class: 'inp', placeholder: 'Прізвища через кому — необов’язково' }), lab: h('b') };
+    x.pplWrap = h('label', { class: 'fld stop-board' }, h('span', null, 'Хто сідає в цій точці'), x.ppl);
+    const base = mins(prevT); if (base != null) x.t.value = hhmm(base + 20);
+    stops.push(x); drawStops();
+    timeWheel(x.t, () => { const a = mins(stops[stops.indexOf(x) - 1]?.t.value || f.tTo.value); return a == null ? Math.ceil(nowMin() / 5) * 5 : a + 20; });
+    x.pt.addEventListener('input', drawStops); x.ppl.addEventListener('input', syncPeople);
+    setTimeout(() => x.pt.focus(), 50);
+  };
+  boardB.addEventListener('input', () => syncPeople());
+  f.from.addEventListener('change', () => stops.length && drawStops()); f.to.addEventListener('change', () => stops.length && drawStops());
+  queueMicrotask(drawStops);
   // --- склад: чипи, підказки, автоматична кількість осіб ---
   const paxHint = h('small', { class: 'pax-h' });
   f.pax.closest('label').append(paxHint);
@@ -1521,7 +1555,8 @@ function editSheet(t) {
   };
   const syncPeople = () => {
     f.people.value = ppl.list.join(', ');
-    if (ppl.list.length) { f.pax.value = String(ppl.list.length); paxTouched = false; } else if (!paxTouched) f.pax.value = '';
+    const extra = stopPax();
+    if (ppl.list.length || extra) { f.pax.value = String(ppl.list.length + extra); paxTouched = false; } else if (!paxTouched) f.pax.value = '';
     const capP = seatsOf();
     peopleBox.replaceChildren(...ppl.list.map((n, i) => h('span', { class: 'ppl-c' + (capP ? (i < capP ? ' fit' : ' over') : ''), title: capP ? (i < capP ? 'є місце' : 'немає місця в авто') : '' }, n, h('button', { type: 'button', 'aria-label': 'Прибрати ' + n, onclick: () => { ppl.list = ppl.list.filter(x => x !== n); syncPeople(); } }, '×'))), pplInput);
     pplInput.placeholder = ppl.list.length ? 'Додати ще…' : 'Прізвище — Enter, або оберіть нижче';
@@ -1634,6 +1669,26 @@ function editSheet(t) {
     if (!o.date || !(o.from || o.to)) return toast('Вкажіть дату і хоча б одну точку');
     if (pplInput.value.trim()) { addTyped(); Object.assign(o, { people: f.people.value, pax: f.pax.value }); }
     const cap = seatsOf(), over = cap && Number(o.pax) > cap;
+    if (stops.length && !extra?.status) {
+      const P = [o.from, o.to, ...stops.map(x => x.pt.value.trim())], T = [o.tFrom, o.tTo, ...stops.map(x => x.t.value.trim())];
+      if (P.some(v => !v)) return toast('Вкажіть усі точки маршруту');
+      const B = [splitPeople(o.people), splitPeople(boardB.value), ...stops.map(x => splitPeople(x.ppl.value))];
+      const n = P.length - 1, chain = P.map(shortPt).join(' → ');
+      const legs = Array.from({ length: n }, (_, i) => {
+        const names = B.slice(0, i + 1).flat();
+        return { ...o, uid: i === 0 ? o.uid : '', from: P[i], to: P[i + 1], tFrom: T[i], tTo: T[i + 1], people: names.join(', '), pax: names.length ? String(names.length) : o.pax,
+          note: [o.note, 'Маршрут ' + (i + 1) + '/' + n + ': ' + chain].filter(Boolean).join('\n') };
+      });
+      btn.disabled = true;
+      const before = isNew ? null : snapTrip(t);
+      try {
+        const r = await api('saveMany', { trips: legs }); closeSheet(); S.day = o.date;
+        toast('Маршрут збережено: ' + n + ' поїздки підряд' + (over ? ' · увага: ' + o.pax + ' осіб на ' + cap + ' місць' : ''), { undo: async () => {
+          try { await api('saveMany', { trips: r.uids.map((uid, i) => i === 0 && before ? before : { uid, status: 'відмінено' }) }); toast('Маршрут скасовано'); load(); } catch (x) { toast(x.message); } } });
+        await load();
+      } catch (x) { toast(x.message); btn.disabled = false; }
+      return;
+    }
     btn.disabled = true;
     const before = isNew ? null : snapTrip(t);
     try {
