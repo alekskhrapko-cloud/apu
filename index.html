@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=42">
+<link rel="stylesheet" href="style.css?v=43">
 </head>
 <body>
 <div id="app"></div>
@@ -247,9 +247,36 @@ function paintOutbox() {
 const EDIT_KEYS = ['id', 'type', 'date', 'tFrom', 'from', 'tTo', 'to', 'route', 'pax', 'people', 'car', 'status', 'deleg', 'resp', 'note', 'contact', 'flight', 'driver'];
 const snapTrip = t => { const o = { uid: t.uid }; EDIT_KEYS.forEach(k => o[k] = t[k] ?? ''); return o; };
 
+// ====== Імена: «Ім'я Прізвище», без по батькові ======
+const FIRST_NAMES = new Set(('олександр олексій сергій віктор арнольд павло антон єгор василь святослав андрій дмитро іван микола михайло олег юрій володимир петро роман тарас богдан ігор максим артем євген віталій вадим руслан степан григорій леонід анатолій валерій валентин костянтин денис ярослав назар остап федір геннадій борис станіслав владислав данило кирило тимур едуард ростислав мирослав марко матвій ілля яків захар орест любомир всеволод вячеслав в\'ячеслав '
+  + 'олена ольга наталія наталя тетяна ірина марія анна ганна юлія оксана світлана людмила катерина галина лариса вікторія роксолана христина софія дарія анастасія алла валентина надія любов віра інна яна мар\'яна лілія ніна аліна діана крістіна олександра євгенія ксенія соломія злата уляна '
+  + 'александр алексей сергей виктор павел андрей дмитрий николай михаил юрий владимир игорь евгений виталий григорий анатолий константин денис илья елена ольга наталья татьяна ирина мария юлия светлана екатерина виктория').split(/\s+/));
+const isPatr = w => /(ович|евич|йович|івна|ївна|овна|евна|ична|ічна)$/i.test(w);
+function personName(n) {
+  const s = String(n || '').trim(); if (!s) return '';
+  if (/[\/;]/.test(s)) return s.split(/\s*[\/;]\s*/).filter(Boolean).map(personName).join(' / ');
+  const w = s.split(/\s+/).filter(Boolean); if (w.length < 2) return s;
+  const core = w.filter((x, i) => !(i > 0 && isPatr(x)));
+  const low = x => x.toLowerCase().replace(/[’`ʼ]/g, "'");
+  const fi = core.findIndex(x => FIRST_NAMES.has(low(x)));
+  if (fi < 0) return core.slice(0, 2).join(' ');
+  const rest = core.filter((_, i) => i !== fi);
+  return core[fi] + (rest.length ? ' ' + rest[rest.length - 1] : '');
+}
+// Нормалізуємо імена одразу після завантаження — так усі екрани показують «Віктор Цимбал».
+function normData(d) {
+  if (!d) return d;
+  (d.cars || []).forEach(c => { if (c.driver) c.driver = personName(c.driver); if (c.drivers) c.drivers = c.drivers.map(personName); });
+  (d.drivers || []).forEach(x => x.name = personName(x.name));
+  (d.coordinators || []).forEach(x => x.name = personName(x.name));
+  (d.trips || []).forEach(t => { if (t.driver) t.driver = personName(t.driver); });
+  if (d.user?.name) d.user.name = personName(d.user.name);
+  return d;
+}
+
 // ====== стан ======
 const S = {
-  token: ls.get('token', null), user: ls.get('user', null), data: ls.get('data', null), loadedAt: ls.get('loadedAt', null),
+  token: ls.get('token', null), user: (u => (u?.name && (u.name = personName(u.name)), u))(ls.get('user', null)), data: normData(ls.get('data', null)), loadedAt: ls.get('loadedAt', null),
   loading: false, error: '', offline: false,
   view: ls.get('view', 'home'), day: null, filter: '', q: '', seen: ls.get('seen', null)
 };
@@ -267,8 +294,8 @@ async function load(range, quiet) {
   let same = false;
   try {
     await flushOutbox();
-    if (S.ro) { const d = await api('asDriver', { login: S.ro.login }); if (!S.ro) return; S.data = d; S.user = d.user; S.loadedAt = Date.now(); S.error = ''; S.offline = false; return; }
-    const d = await api('data', range || (S.user?.admin && S.data ? { from: S.data.from, to: S.data.to } : {}));
+    if (S.ro) { const d = normData(await api('asDriver', { login: S.ro.login })); if (!S.ro) return; S.data = d; S.user = d.user; S.loadedAt = Date.now(); S.error = ''; S.offline = false; return; }
+    const d = normData(await api('data', range || (S.user?.admin && S.data ? { from: S.data.from, to: S.data.to } : {})));
     applyOutbox(d);
     if (!range) notifyNew(S.data, d);
     // Фонове оновлення без змін у даних не перебудовує екран (не перезапускає анімації, не смикає прокрутку).
@@ -356,7 +383,7 @@ function swapView(fn, dir) {
   document.documentElement.dataset.vt = dir || 'fwd';
   document.startViewTransition(fn).finished.finally(() => delete document.documentElement.dataset.vt);
 }
-function initials(n) { const p = String(n || '').trim().split(/\s+/); return ((p[1] || p[0] || '?')[0] || '?').toUpperCase(); }
+function initials(n) { const p = personName(n).split(/\s+/); return ((p[0] || '?')[0] || '?').toUpperCase(); }
 // Бічна панель (лише для координатора на широкому екрані; на телефоні — вкладки під шапкою).
 function sideNav() {
   const d = S.data, today = d?.today, list = d ? d.trips.filter(t => t.date === today) : [];
@@ -514,7 +541,7 @@ function driversView(main) {
       const trk = m == null ? ['never', 'OwnTracks не налаштовано'] : m <= TRACK_OK ? ['ok', 'Позиція ' + agoWords(m)] : ['stale', 'Позиція ' + agoWords(m)];
       const cars = u.cars.map(c => (d.cars.find(x => x.code === c) || {}).car || c).join(', ');
       box.append(h('button', { class: 'dcard', style: '--i:' + i, onclick: () => peekTab(u) },
-        h('div', { class: 'dc-top' }, h('span', { class: 'av' }, initials(u.name)), h('div', { class: 'dc-n' }, h('b', null, u.name), h('small', null, cars || 'авто не призначено')), !u.active ? h('span', { class: 'chip' }, 'неактивний') : null),
+        h('div', { class: 'dc-top' }, h('span', { class: 'av' }, initials(u.name)), h('div', { class: 'dc-n' }, h('b', null, personName(u.name)), h('small', null, cars || 'авто не призначено')), !u.active ? h('span', { class: 'chip' }, 'неактивний') : null),
         h('div', { class: 'dc-meta' },
           h('span', null, tl.length ? tl.length + ' ' + (tl.length === 1 ? 'поїздка' : tl.length < 5 ? 'поїздки' : 'поїздок') + ' сьогодні' : 'Сьогодні без поїздок'),
           next ? h('span', null, 'Далі: ' + fmtT(next.tFrom) + ' · ' + cleanPt(next.from)) : null),
@@ -522,7 +549,7 @@ function driversView(main) {
     });
   };
   draw();
-  if (!PEEK.list) api('driverList').then(r => { PEEK.list = r.list; PEEK.err = ''; if (S.view === 'drivers' && !S.ro) draw(); }).catch(e => { PEEK.err = e.message; draw(); });
+  if (!PEEK.list) api('driverList').then(r => { r.list.forEach(x => x.dname = personName(x.name)); PEEK.list = r.list; PEEK.err = ''; if (S.view === 'drivers' && !S.ro) draw(); }).catch(e => { PEEK.err = e.message; draw(); });
 }
 // Кабінет водія відкривається в новій вкладці — ваш екран координатора лишається як був.
 function peekTab(u) { const w = window.open(location.pathname + '?peek=' + encodeURIComponent(u.login), '_blank'); if (!w) peekOpen(u); }
@@ -531,7 +558,7 @@ async function peekOpen(u) {
   const back = { user: S.user, data: S.data, view: S.view, y: scrollY, loadedAt: S.loadedAt };
   toast('Відкриваю кабінет: ' + shortName(u.name));
   try {
-    const d = await api('asDriver', { login: u.login });
+    const d = normData(await api('asDriver', { login: u.login }));
     S.ro = { login: u.login, name: u.name, back };
     S.data = d; S.user = d.user; S.loadedAt = Date.now();
     swapView(() => { render(); scrollTo(0, 0); });
@@ -814,7 +841,7 @@ function renderCoord(main) {
   if (S.view === 'cars') return carsView(main, d.trips.filter(t => t.date === day));
   if (S.view === 'map') return mapView(main, d.trips.filter(t => t.date === d.today));
 
-  main.append(h('div', { class: 'tools', style: 'margin-top:10px' }, h('button', { class: 'tool', onclick: () => shareSheet(d.trips.filter(t => t.date === day), { day: true }) }, ico('share'), 'Поділитися розкладом дня'), h('button', { class: 'tool', onclick: () => copyDaySheet(day) }, 'Копіювати день')));
+  main.append(h('div', { class: 'tools', style: 'margin-top:10px' }, h('button', { class: 'tool', onclick: () => shareSheet(d.trips.filter(t => t.date === day), { day: true }) }, ico('share'), 'Поділитися розкладом дня'), h('button', { class: 'tool', onclick: () => copyDaySheet(day) }, 'Копіювати день'), h('button', { class: 'tool ai-t', onclick: () => pasteSheet() }, 'Вставити повідомлення')));
   const q = h('input', { class: 'inp search', type: 'search', placeholder: 'Пошук: прізвище, готель, делегація, авто', value: S.q, oninput: e => { S.q = e.target.value; drawList(); } });
   const box = h('div');
   main.append(q, box);
@@ -888,7 +915,7 @@ function kpiPop(btn, title, build) {
   new MutationObserver((_, o) => { if (!btn.isConnected) { pop?.remove(); o.disconnect(); } }).observe(document.body, { childList: true, subtree: true });
 }
 function vocative(n) {
-  const w = String(n || '').trim().split(/\s+/)[1] || '';
+  const w = personName(n).split(/\s+/)[0] || '';
   if (!w) return '';
   if (/й$/.test(w)) return w.slice(0, -1) + 'ю';
   if (/[ая]$/.test(w)) return w.slice(0, -1) + (w.endsWith('я') ? 'є' : 'о');
@@ -1079,8 +1106,14 @@ function timeline(main, list, cf, day) {
       lane.append(blk);
     });
     lane.style.minHeight = (14 + Math.max(1, tracks.length) * 52) + 'px';
-    grid.append(h('div', { class: 'tl-row' },
-      h('div', { class: 'tl-lab' }, code ? [h('b', null, code), h('span', null, car ? shortName(car.driver) : '—')] : h('b', { style: 'color:var(--red)' }, 'Без авто')), lane));
+    // Присутність у Берліні: поза Берліном — сіра штриховка; момент прибуття/від'їзду — позначка на шкалі.
+    const pd = code ? presDay(code, day) : null;
+    if (pd) {
+      pd.out.forEach(([a, b]) => { const x0 = Math.max(a, h0 * 60), x1 = Math.min(b, h1 * 60); if (x1 > x0) lane.prepend(h('div', { class: 'tl-away', style: `left:${(x0 - h0 * 60) * PX}px;width:${(x1 - x0) * PX}px` })); });
+      pd.marks.forEach(([m, kind]) => { if (m > h0 * 60 && m < h1 * 60) lane.append(h('div', { class: 'tl-pm ' + kind, style: `left:${(m - h0 * 60) * PX}px`, title: (kind === 'arr' ? 'Прибуває до Берліна о ' : 'Від’їжджає з Берліна о ') + hhmm(m) }, h('span', null, (kind === 'arr' ? 'у Берліні з ' : 'їде о ') + hhmm(m)))); });
+    }
+    grid.append(h('div', { class: 'tl-row' + (pd?.allOut ? ' away' : '') },
+      h('div', { class: 'tl-lab' }, code ? [h('b', null, code), h('span', null, car ? shortName(car.driver) : '—'), pd?.note ? h('small', { class: 'tl-note' }, pd.note) : null] : h('b', { style: 'color:var(--red)' }, 'Без авто')), lane));
   }
   if (day === d.today) {
     const now = new Date(), nm = now.getHours() * 60 + now.getMinutes();
@@ -1160,7 +1193,7 @@ function tlDraggable(blk, t, PX, dayList) {
   blk.addEventListener('contextmenu', e => { if (st) e.preventDefault(); });
 }
 function shortPt(p) { return String(p || '—').replace(URL_RE, '').split(/[,(]/)[0].trim().slice(0, 28); }
-function shortName(n) { const s = String(n || ''); if (/[\/;]/.test(s)) return s.split(/\s*[\/;]\s*/).filter(Boolean).map(shortName).join(' / '); const p = s.split(/\s+/).filter(Boolean); return p.length > 1 ? p[0] + ' ' + p[1][0] + '.' : s; }
+function shortName(n) { return personName(n); }
 
 // Мініатюра авто у вкладці «Авто»: справжня анімація/фото, якщо завантажені через «МЕД», інакше — намальований силует.
 // Файли великі (до 5 МБ), тому вантажимо лише коли картка з'являється на екрані, і тримаємо в пам'яті сесії.
@@ -1196,6 +1229,24 @@ function isLocalCar(c, cars) {
   const local = new Set((cars || []).filter(x => /0-143/.test(x.car || '')).flatMap(x => x.drivers?.length ? x.drivers : [x.driver]).filter(Boolean).map(n => String(n).toLowerCase()));
   const own = c.drivers?.length ? c.drivers : [c.driver];
   return own.some(n => n && [...local].some(m => sameName(m, n)));
+}
+// Присутність авто протягом дня: відрізки «поза Берліном», позначки прибуття/від’їзду і підпис.
+function presDay(code, day) {
+  const l = presList(code); if (!l.length) return null;
+  const toM = iso => { if (!iso) return null; const [dd, tt] = iso.split('T'); const base = dd < day ? -1 : dd > day ? 1441 : null; return base != null ? base : mins(tt || '00:00') ?? 0; };
+  const ins = l.map(p => [p.from ? toM(p.from) : -1, p.to ? toM(p.to) : 1441]).map(([a, b]) => [Math.max(0, a), Math.min(1440, b)]).filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0]);
+  const out = []; let c = 0;
+  ins.forEach(([a, b]) => { if (a > c) out.push([c, a]); c = Math.max(c, b); }); if (c < 1440) out.push([c, 1440]);
+  const marks = []; ins.forEach(([a, b]) => { if (a > 0) marks.push([a, 'arr']); if (b < 1440) marks.push([b, 'dep']); });
+  const allOut = !ins.length;
+  let note = '';
+  if (allOut) {
+    const r = presAt(code, day + 'T12:00');
+    const next = l.filter(p => p.from && p.from.slice(0, 10) > day).sort((a, b) => a.from.localeCompare(b.from))[0];
+    const prev = l.filter(p => p.to && p.to.slice(0, 10) < day).sort((a, b) => b.to.localeCompare(a.to))[0];
+    note = next && (!prev || next.from.slice(0, 10) <= addDays(day, 3)) ? 'ще не в Берліні · прибуде ' + presDT(next.from) : prev ? 'поїхав додому відпочивати :)' : 'не в Берліні';
+  } else if (marks.length) note = marks.map(([m, k]) => (k === 'arr' ? 'прибуде о ' : 'поїде о ') + hhmm(m)).join(', ');
+  return { out: allOut ? [[0, 1440]] : out, marks, allOut, note };
 }
 function presDT(iso) { if (!iso) return ''; const [dd, tt] = iso.split('T'); return dd.slice(8, 10) + '.' + dd.slice(5, 7) + (tt && tt !== '00:00' ? ' ' + tt : ''); }
 function presChip(code, iso) {
@@ -1555,7 +1606,7 @@ function rankCars(d, o, selfUid) {
   return { list, best, pax };
 }
 
-function editSheet(t) {
+function editSheet(t, opts = {}) {
   const d = S.data, isNew = !t.uid;
   const f = {};
   const inp = (k, label, attrs = {}) => { f[k] = h('input', { class: 'inp', value: t[k] || '', ...attrs }); return h('label', { class: 'fld' }, h('span', null, label), f[k]); };
@@ -1802,6 +1853,15 @@ function editSheet(t) {
     foot.unshift(h('button', { class: 'btn ghost', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: () => { closeSheet(); editSheet({ ...collect(), uid: '', car: '', status: 'призначено' }); } }, 'Копія'));
     if (t.status !== 'відмінено') foot.unshift(h('button', { class: 'btn danger', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: e => { if (confirm('Позначити поїздку як відмінену?')) save(e.currentTarget, { status: 'відмінено' }); } }, 'Відмінити'));
   }
+  // З повідомлення: розпізнані поля сірі, доки їх не підтвердите чи не зміните.
+  if (opts.sugg?.length) {
+    body.unshift(h('div', { class: 'ai-note' }, h('b', null, 'Заповнено з повідомлення'), h('span', null, 'Сірі поля — пропозиції. Перевірте, змініть за потреби і збережіть.'),
+      h('details', null, h('summary', null, 'Показати повідомлення'), h('pre', null, opts.src || ''))));
+    opts.sugg.forEach(k => { const el = f[k]; if (!el) return; el.classList.add('sugg'); const clr = () => el.classList.remove('sugg'); el.addEventListener('input', clr, { once: true }); el.addEventListener('change', clr, { once: true }); });
+    if (opts.sugg.includes('people')) peopleBox.classList.add('sugg');
+    setTimeout(() => { if (!f.car.value) { const r = rankCars(d, collect(), t.uid); if (r?.best) { f.car.value = r.best.c.code; f.car.dispatchEvent(new Event('change')); f.car.classList.add('sugg'); toast('Запропоновано авто ' + r.best.c.code + ' — перевірте'); } } }, 60);
+  }
+  if (isNew && !opts.sugg) body.unshift(h('button', { type: 'button', class: 'chipbtn ai-paste', onclick: () => { closeSheet(true); pasteSheet(); } }, 'Вставити повідомлення від колеги'));
   sheet(isNew ? 'Нова поїздка' : 'Поїздка ' + fmtT(t.tFrom), body, foot);
 }
 
@@ -2565,6 +2625,115 @@ function tgCoordCard(list) {
 
 document.addEventListener('click', e => { const a = e.target.closest?.('a[href^="https://wa.me/"]'); if (a && !a.target) { a.target = '_blank'; a.rel = 'noopener'; } }, true);
 
+// ====== ПОВІДОМЛЕННЯ → ПОЇЗДКА ======
+// Колега пише у WhatsApp «Забери мене завтра о 9:30 з Adlon до Посольства, нас двоє» — вставляєте текст,
+// застосунок розпізнає дату, час, звідки/куди, людей, рейс, телефон і відкриває заповнену форму.
+// Розбір відбувається прямо на телефоні/комп’ютері — текст нікуди не надсилається.
+const MSG_DAYS = [[/післязавтра|послезавтра|übermorgen|day after tomorrow/i, 2], [/завтра|tomorrow|morgen(?!s)/i, 1], [/сьогодні|сегодня|heute|today|зараз|сейчас/i, 0]];
+const MSG_DOW = [[/(?<!по)неділ|воскрес|sonntag|sunday/i, 0], [/понеділ|понедел|montag|monday/i, 1], [/вівтор|вторн|dienstag|tuesday/i, 2], [/серед|среда|среду|mittwoch|wednesday/i, 3], [/четвер|donnerstag|thursday/i, 4], [/п.ятниц|пятниц|freitag|friday/i, 5], [/субот|суббот|samstag|saturday/i, 6]];
+const MSG_NUM = { 'один': 1, 'одна': 1, 'двоє': 2, 'двое': 2, 'двох': 2, 'троє': 3, 'трое': 3, 'трьох': 3, 'четверо': 4, 'чотирьох': 4, "п'ятеро": 5, 'пятеро': 5, 'шестеро': 6, 'семеро': 7 };
+const MSG_ALIAS = [[/посольств|embassy|botschaft|(?<![\p{L}])пу(?![\p{L}])|albrechtstr/iu, 'Посольство'], [/урядов\p{L}* термінал|правительственн\p{L}* термин|regierungs|government terminal/iu, 'Урядовий термінал BER'], [/аеропорт|аэропорт|airport|flughafen|(?<![\p{L}])ber(?![\p{L}])/iu, 'Аеропорт BER'], [/hauptbahnhof|головн\p{L}* вокзал|(?<![\p{L}])hbf(?![\p{L}])/iu, 'Berlin Hauptbahnhof']];
+function msgPoints(d) {
+  const set = new Map();
+  const add = (label, key) => { const k = String(key || label).toLowerCase().replace(URL_RE, '').split(/[,(]/)[0].trim(); if (k.length >= 4 && !set.has(k)) set.set(k, cleanPt(label)); };
+  (d.addresses || []).forEach(a => add(a.name));
+  d.trips.forEach(t => { [t.from, t.to].forEach(p => { if (p) add(p); }); });
+  PLACES.forEach(pl => { add(pl.name); add(pl.name, pl.short); });
+  return [...set.entries()].sort((a, b) => b[0].length - a[0].length);
+}
+function parseMsg(text, d) {
+  const raw = String(text || '').replace(/\r/g, ''), low = raw.toLowerCase();
+  const o = {}, sugg = [];
+  // дата
+  let date = null;
+  for (const [re, n] of MSG_DAYS) if (re.test(low)) { date = addDays(d.today, n); break; }
+  const dm = /(?:^|[^\d:])(\d{1,2})[.\/](\d{1,2})(?:[.\/](\d{2,4}))?(?![\d:])/.exec(raw);
+  if (dm && +dm[2] >= 1 && +dm[2] <= 12 && +dm[1] >= 1 && +dm[1] <= 31 && !/^\s*(год|uhr|h\b)/i.test(raw.slice(dm.index + dm[0].length))) {
+    const y = dm[3] ? (dm[3].length === 2 ? '20' + dm[3] : dm[3]) : d.today.slice(0, 4);
+    date = y + '-' + String(dm[2]).padStart(2, '0') + '-' + String(dm[1]).padStart(2, '0');
+    if (!dm[3] && date < d.today && addDays(date, 300) > d.today) date = (+y + 1) + date.slice(4);
+  }
+  if (!date) for (const [re, wd] of MSG_DOW) if (re.test(low)) { let x = d.today; for (let i = 0; i < 7; i++) { if (dObj(x).getDay() === wd) break; x = addDays(x, 1); } date = x; break; }
+  o.date = date || d.today; if (date) sugg.push('date');
+  // час: 9:30, 9.30, о 9, в 9 ранку, 9 Uhr, 9am (дату з тексту прибираємо, щоб «23.11» не стало часом)
+  const rawT = dm ? raw.slice(0, dm.index) + ' '.repeat(dm[0].length) + raw.slice(dm.index + dm[0].length) : raw, lowT = rawT.toLowerCase();
+  const times = [];
+  const tre = /(?:^|[^\d.])([01]?\d|2[0-3])[:.]([0-5]\d)(?![\d.])/g; let m;
+  while ((m = tre.exec(rawT))) times.push({ i: m.index, v: hhmm(+m[1] * 60 + +m[2]) });
+  const tre2 = /(?<![\p{L}\d])(?:о|об|в|во|на|at|um|до|к)\s+(\d{1,2})(?:\s*(?:год\p{L}*|час\p{L}*|uhr|h(?![\p{L}])|am|pm|ранку|утра|вечора|вечера|дня))?(?![\d:.])/giu;
+  while ((m = tre2.exec(lowT))) { let hgt = +m[1]; if (hgt > 23) continue; if (/pm|вечора|вечера|дня/.test(m[0]) && hgt < 12) hgt += 12; if (!times.some(x => Math.abs(x.i - m.index) < 6)) times.push({ i: m.index, v: hhmm(hgt * 60), pre: m[0].trim().split(/\s/)[0] }); }
+  times.sort((a, b) => a.i - b.i);
+  if (times.length) { o.tFrom = times[0].v; sugg.push('tFrom'); }
+  if (times.length > 1 && mins(times[1].v) > mins(times[0].v)) { o.tTo = times[1].v; sugg.push('tTo'); }
+  // рейс
+  const fm = /\b([A-Z]{2}|[A-Z]\d|\d[A-Z])\s?(\d{2,4})\b/.exec(raw.replace(/\b\d{1,2}[:.]\d{2}\b/g, ' '));
+  if (fm && !/^\d+$/.test(fm[1] + fm[2])) { o.flight = fm[1] + fm[2]; sugg.push('flight'); }
+  // точки: відомі місця + «з/від … до/в …»
+  const found = [];
+  for (const [re, label] of MSG_ALIAS) { const x = re.exec(low); if (x) found.push({ i: x.index, len: x[0].length, label }); }
+  for (const [key, label] of msgPoints(d)) { const i = low.indexOf(key); if (i >= 0 && !found.some(f => i >= f.i && i < f.i + Math.max(f.len, 4))) found.push({ i, len: key.length, label }); }
+  found.sort((a, b) => a.i - b.i);
+  const roleOf = f => { const before = low.slice(Math.max(0, f.i - 14), f.i); if (/(?:^|\s)(з|із|зі|від|из|от|from|von|ab|aus)\s+(?:\S+\s+)?$/.test(before)) return 'from'; if (/(?:^|\s)(до|в|у|на|to|nach|zum|zur|in|к|ко)\s+(?:\S+\s+)?$/.test(before)) return 'to'; return ''; };
+  found.forEach(f => f.role = roleOf(f));
+  let from = found.find(f => f.role === 'from'), to = found.find(f => f.role === 'to' && f !== from);
+  const rest = found.filter(f => f !== from && f !== to && f.label !== from?.label && f.label !== to?.label);
+  if (!from && rest.length) from = rest.shift(); if (!to && rest.length) to = rest.shift();
+  const freeAfter = re => { const x = re.exec(raw); if (!x) return ''; return x[2].replace(/\s+(?:о|об|в|у|до|на|at|um|і|й|та|и|and|und|then|потім|далі|рейс|flight)(?:\s.*)?$/iu, '').replace(/[,.;!?].*$/, '').trim(); };
+  if (!from) { const v = freeAfter(/(?:^|\s)(з|із|від|from|von|из|от)\s+([^\n]{3,60})/iu); if (v && !/^\d/.test(v)) from = { label: v }; }
+  if (!to) { const v = freeAfter(/(?:^|\s)(до|to|nach|zum|zur)\s+([^\n]{3,60})/i); if (v && !/^\d/.test(v) && v !== from?.label) to = { label: v }; }
+  if (from) { o.from = from.label; sugg.push('from'); }
+  if (to) { o.to = to.label; sugg.push('to'); }
+  // люди
+  const known = knownPeople(d.trips, '').all;
+  const ppl = known.filter(n => { const sur = n.split(/\s+/)[0]; return sur.length > 3 && new RegExp('(?<![\\p{L}])' + sur.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\p{L}])', 'iu').test(raw); });
+  if (ppl.length) { o.people = ppl.join(', '); sugg.push('people'); }
+  // кількість осіб
+  const pm = /(\d{1,2})\s*(?:особ|осіб|осо|людин|людей|чол|pax|pers|человек|гост|passag|пасаж)/i.exec(raw);
+  let pax = pm ? +pm[1] : null;
+  if (!pax) { for (const [w, n] of Object.entries(MSG_NUM)) if (new RegExp('(^|\\s)(нас\\s+)?' + w + '(\\s|$|[,.!])', 'i').test(low)) { pax = n; break; } }
+  if (!pax && /забер\w* мене|заберите меня|pick me up|hol mich/i.test(low) && !ppl.length) pax = 1;
+  if (pax) { o.pax = String(pax); sugg.push('pax'); }
+  // телефон → контакт
+  const ph = /(\+?\d[\d\s()-]{8,}\d)/.exec(raw.replace(/\b\d{1,2}[:.]\d{2}\b/g, ' '));
+  if (ph) { o.contact = ph[1].trim(); sugg.push('contact'); }
+  // делегація
+  const dl = (d.delegations || []).find(x => x && x.length > 3 && new RegExp('(?<![\\p{L}])' + x.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\p{L}])', 'iu').test(low));
+  if (dl) { o.deleg = dl; sugg.push('deleg'); }
+  o.note = ''; o.status = 'призначено';
+  return { trip: o, sugg: [...new Set(sugg)] };
+}
+function pasteSheet(prefill) {
+  const ta = h('textarea', { class: 'inp', style: 'min-height:140px', placeholder: 'Вставте сюди повідомлення з WhatsApp, Telegram чи пошти.\nНаприклад: «Привіт! Забери мене завтра о 9:30 з Hotel Adlon і привези в Посольство. Нас двоє: Іваненко, Петренко. +49 170 1234567»' });
+  if (prefill) ta.value = prefill;
+  const who = h('input', { class: 'inp', placeholder: 'Хто написав (необов’язково): ім’я, телефон' });
+  const prev = h('div', { class: 'ai-prev' });
+  const show = () => {
+    const v = ta.value.trim(); if (!v) return prev.replaceChildren();
+    const r = parseMsg(v, S.data), t = r.trip;
+    const row = (l, val) => val ? h('div', null, h('span', null, l), h('b', null, val)) : null;
+    prev.replaceChildren(h('div', { class: 'ai-h' }, 'Що я зрозумів'), row('Дата', dayTitle(t.date, S.data.today)), row('Час подачі', t.tFrom), row('Прибуття', t.tTo), row('Звідки', t.from), row('Куди', t.to), row('Осіб', t.pax), row('Склад', t.people), row('Рейс', t.flight), row('Контакт', t.contact), row('Делегація', t.deleg),
+      !t.tFrom || !t.from ? h('div', { class: 'ai-miss' }, 'Не знайшов: ' + [!t.tFrom && 'час', !t.from && 'звідки', !t.to && 'куди'].filter(Boolean).join(', ') + ' — допишете у формі.') : null);
+  };
+  ta.addEventListener('input', show);
+  sheet('Поїздка з повідомлення', [h('p', { class: 'lead-n', style: 'margin-top:0' }, 'Скопіюйте повідомлення колеги й вставте нижче. Я розпізнаю дату, час, адреси, людей і запропоную авто — вам лишиться перевірити й зберегти. Текст нікуди не надсилається.'), ta, h('label', { class: 'fld' }, h('span', null, 'Хто написав'), who), prev], [
+    navigator.clipboard?.readText ? h('button', { class: 'btn ghost', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: async () => { try { ta.value = await navigator.clipboard.readText(); show(); } catch { toast('Немає доступу до буфера — вставте вручну (Ctrl/⌘ V)'); } } }, 'Вставити з буфера') : null,
+    h('button', { class: 'btn', onclick: () => {
+      const v = ta.value.trim(); if (!v) return toast('Вставте текст повідомлення');
+      const r = parseMsg(v, S.data);
+      if (who.value.trim()) { r.trip.resp = who.value.trim(); r.sugg.push('resp'); }
+      r.trip.note = 'З повідомлення: ' + v.replace(/\s+/g, ' ').slice(0, 300);
+      closeSheet(true); S.day = r.trip.date;
+      editSheet(r.trip, { sugg: r.sugg, src: v });
+    } }, 'Розпізнати й заповнити')].filter(Boolean));
+  show(); setTimeout(() => ta.focus(), 60);
+}
+// Вставили текст (Ctrl/⌘ V) просто на екрані координатора — пропонуємо зробити з нього поїздку.
+document.addEventListener('paste', e => {
+  if (!S.user?.admin || S.ro || $('#ov') || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
+  const v = e.clipboardData?.getData('text') || ''; if (v.trim().length < 12) return;
+  e.preventDefault(); pasteSheet(v);
+});
+
 // ====== РЕЙСИ НАЖИВО (AeroDataBox через сервер) ======
 // Статус, затримка, термінал, гейт/вихід, багажна стрічка. Оновлюється кожні 5 хв, поки застосунок відкритий;
 // зміни (затримка, новий гейт, скасування) — повідомленням унизу екрана.
@@ -2752,6 +2921,7 @@ function palette() {
   const cmds = [
     { k: 'cmd', t: 'Нова поїздка', s: 'Додати на ' + dayTitle(S.day || d.today, d.today).toLowerCase(), run: () => editSheet({ date: S.day || d.today, status: 'призначено' }) },
     ...VIEWS.map(([k, l]) => ({ k: 'cmd', t: 'Перейти: ' + (VIEW_TITLE[k] || l), s: '', run: () => setView(k) })),
+    { k: 'cmd', t: 'Поїздка з повідомлення', s: 'вставити текст із WhatsApp', run: () => pasteSheet() },
     { k: 'cmd', t: 'Копіювати день', s: dayTitle(S.day || d.today, d.today), run: () => copyDaySheet(S.day || d.today) }
   ];
   const draw = () => {

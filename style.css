@@ -815,3 +815,27 @@ body.wide .rbar{left:calc(50% + 120px)}
 .flnote button{border:0;background:rgba(255,255,255,.14);color:#fff;font:600 13px var(--body-f);padding:7px 11px;border-radius:9px;cursor:pointer}
 .flnote .fn-x{background:transparent;font-size:18px;padding:4px 6px;color:#BDB6AF}
 @media (max-width:600px){.fl-route{grid-template-columns:1fr}.fl-arrow{display:none}}
+
+/* ====== Розклад: присутність у Берліні ====== */
+.tl-away{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,rgba(120,112,104,.10) 0 6px,rgba(120,112,104,.04) 6px 12px);pointer-events:none}
+.tl-row.away .tl-lab{opacity:.55}
+.tl-row.away .tl-lane{background-color:rgba(120,112,104,.05)}
+.tl-note{display:block;font-size:11px;color:var(--muted);line-height:1.25;margin-top:2px;white-space:normal}
+.tl-pm{position:absolute;top:0;bottom:0;width:0;border-left:2px dashed #8E867E;z-index:2;pointer-events:auto}
+.tl-pm span{position:absolute;top:2px;left:4px;font:600 10.5px var(--body-f);color:#5F5953;background:#fff;border:1px solid var(--line);border-radius:6px;padding:1px 5px;white-space:nowrap}
+.tl-pm.arr{border-left-color:#2E8B57}.tl-pm.arr span{color:#1E6B42}
+
+/* ====== Поїздка з повідомлення ====== */
+.inp.sugg,select.inp.sugg{color:#8C857E;font-style:italic;background:#F7F5F2;border-style:dashed}
+.ppl.sugg{border-style:dashed;background:#F7F5F2}
+.ai-note{display:flex;flex-direction:column;gap:3px;padding:10px 12px;border-radius:12px;background:#F1EEF8;border:1px solid #D9D2EC;color:#3E3560;font-size:13px;margin-bottom:6px}
+.ai-note details{margin-top:4px}.ai-note summary{cursor:pointer;color:#5B4FA0}
+.ai-note pre{white-space:pre-wrap;font:13px var(--body-f);margin:6px 0 0;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #E4DEF2}
+.ai-paste{justify-self:start;margin-bottom:4px}
+.ai-prev{display:grid;gap:4px;margin-top:10px;font-size:13.5px}
+.ai-prev:empty{display:none}
+.ai-prev > div{display:grid;grid-template-columns:96px 1fr;gap:8px}
+.ai-prev > div span{color:var(--muted)}
+.ai-h{display:block!important;font-weight:600;color:var(--muted);font-size:12.5px;margin-bottom:2px}
+.ai-miss{display:block!important;color:#8A5A00;font-size:12.5px;margin-top:4px}
+.tool.ai-t{border-style:dashed}
