@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=44">
+<link rel="stylesheet" href="style.css?v=45">
 </head>
 <body>
 <div id="app"></div>
@@ -117,9 +117,12 @@ function span(t) {
   const s = all.length ? mins(all[0]) : mins(t.tTo);
   let e = all.length > 1 ? mins(all[1]) : mins(t.tTo);
   if (s == null) return null;
+  // Авто в кортежі зайняте майже весь день: якщо не вказано, до котрої, — до 22:00.
+  if (isMotor(t) && (all.length < 2 && mins(t.tTo) == null)) e = Math.max(s + 60, 22 * 60);
   if (e == null || e <= s) e = s + 60;
   return [s, e];
 }
+function isMotor(t) { return !!t && /^(так|true|1|✓|yes|кортеж)$/i.test(String(t.motor || '').trim()); }
 function fmtT(t) { const m = mins(t); return m == null ? (t || '—') : hhmm(m); }
 // Дзвінки: за замовчуванням через WhatsApp (безкоштовно, у водіїв є лише WhatsApp); можна перемкнути на звичайний телефон.
 function waNum(p) { let n = String(p || '').replace(/[^\d+]/g, ''); if (n.startsWith('+')) n = n.slice(1); else if (n.startsWith('00')) n = n.slice(2); else if (n.startsWith('0')) n = '49' + n.slice(1); return n; }
@@ -244,7 +247,7 @@ function paintOutbox() {
   el.hidden = !n;
   el.textContent = n ? 'Без зв’язку: ' + n + ' ' + (n === 1 ? 'зміна чекає' : 'змін чекають') + ' на надсилання. Надішлю автоматично.' : '';
 }
-const EDIT_KEYS = ['id', 'type', 'date', 'tFrom', 'from', 'tTo', 'to', 'route', 'pax', 'people', 'car', 'status', 'deleg', 'resp', 'note', 'contact', 'flight', 'driver'];
+const EDIT_KEYS = ['id', 'type', 'date', 'tFrom', 'from', 'tTo', 'to', 'route', 'pax', 'people', 'car', 'status', 'deleg', 'resp', 'note', 'contact', 'flight', 'driver', 'motor'];
 const snapTrip = t => { const o = { uid: t.uid }; EDIT_KEYS.forEach(k => o[k] = t[k] ?? ''); return o; };
 
 // ====== Імена: «Ім'я Прізвище», без по батькові ======
@@ -680,6 +683,7 @@ function tripCard(t, coord, conflict) {
     conflict ? h('span', { class: 'chip cf' }, 'Конфлікт') : null,
     coord && atRisk(t) ? h('span', { class: 'chip cf' }, 'Не виїхав') : null,
     t.type ? h('span', { class: 'chip' }, t.type) : null,
+    isMotor(t) ? h('span', { class: 'chip motor' }, 'У кортежі' + (mins(t.tTo) == null ? ' · весь день' : '')) : null,
     h('span', { class: 'chip st', style: '--c:' + (ST_COL[t.status] || 'var(--st-pr)') }, t.status)));
   if (coord) card.append(h('div', { style: 'margin-top:8px;display:flex;gap:6px;flex-wrap:wrap' },
     t.car ? h('span', { class: 'chip car' }, (car ? car.driver + ', ' : '') + t.car) : h('span', { class: 'chip cf' }, 'Без авто'),
@@ -1097,11 +1101,11 @@ function timeline(main, list, cf, day) {
       tracks[k] = s[1];
       const left = (s[0] - h0 * 60) * PX, width = Math.max((s[1] - s[0]) * PX - 3, 46);
       const blk = h('button', {
-        class: 'tl-blk' + (cf.has(t.uid) ? ' cf' : '') + (t.status === 'відмінено' ? ' x' : ''),
+        class: 'tl-blk' + (cf.has(t.uid) ? ' cf' : '') + (t.status === 'відмінено' ? ' x' : '') + (isMotor(t) ? ' motor' : ''),
         style: `left:${left}px;width:${width}px;top:${7 + k * 52}px;height:46px;--c:${ST_COL[t.status] || 'var(--st-pr)'}`,
         title: `${fmtT(t.tFrom)} ${t.from} → ${t.to}. Перетягніть, щоб змінити час або авто`,
         onclick: e => { if (blk._dragged) { blk._dragged = false; return; } detailSheet(t, cf.has(t.uid), e.currentTarget); }
-      }, h('b', { class: 'num' }, fmtT(t.tFrom) + (badgeOf(t) ? ' •' : '')), shortPt(t.from) + ' → ' + shortPt(t.to));
+      }, h('b', { class: 'num' }, fmtT(t.tFrom) + (badgeOf(t) ? ' •' : '')), isMotor(t) ? 'Пересувається у кортежі' + (t.deleg ? ' · ' + t.deleg : '') : shortPt(t.from) + ' → ' + shortPt(t.to));
       if (t.status !== 'завершено' && t.status !== 'відмінено') tlDraggable(blk, t, PX, list);
       lane.append(blk);
     });
@@ -1631,6 +1635,13 @@ function editSheet(t, opts = {}) {
   f.car.value = t.car || '';
   f.driver = h('select', { class: 'inp' });
   const pick = h('div', { class: 'pick' });
+  // ----- Кортеж: авто зайняте майже весь день -----
+  f.motor = h('input', { type: 'hidden', value: isMotor(t) ? 'так' : '' });
+  const motorCb = h('input', { type: 'checkbox', checked: isMotor(t) });
+  const motorRow = h('label', { class: 'motor-row' + (isMotor(t) ? ' on' : '') }, motorCb, h('span', null, h('b', null, 'Рухається в кортежі'), h('small', null, 'Авто й водій зайняті майже весь день (до 22:00, якщо не вказано час прибуття). У розкладі — «пересувається у кортежі».')), f.motor);
+  motorCb.addEventListener('change', () => { f.motor.value = motorCb.checked ? 'так' : ''; motorRow.classList.toggle('on', motorCb.checked); drawAvail(); });
+  // ----- Пошук рейсу за часом -----
+  const flBox = h('div', { class: 'fl-find' });
   // ----- Маршрут із кількома зупинками: А → Б → В… Кожен відрізок збережеться окремим рядком таблиці. -----
   const stops = [];
   const boardB = h('input', { class: 'inp', placeholder: 'Прізвища через кому — необов’язково' });
@@ -1647,7 +1658,9 @@ function editSheet(t, opts = {}) {
     inp('to', 'Точка призначення', { list: 'pts' }),
     bWrap, stopsBox,
     pick,
-    h('div', { class: 'grid2' }, sel('type', 'Тип', [['', '—'], ...(d.types || []).map(x => [x, x])]), inp('flight', 'Рейс', { placeholder: 'LO389, 11:25' })),
+    h('div', { class: 'grid2' }, sel('type', 'Тип', [['', '—'], ...(d.types || []).map(x => [x, x])]), inp('flight', 'Рейс', { placeholder: 'LO389 або час, напр. 17:55', autocomplete: 'off' })),
+    flBox,
+    motorRow,
     h('div', { class: 'fld' }, h('span', null, 'Склад (прізвища)'), peopleBox, pplDl, pplSug, f.people),
     inp('deleg', 'Делегація', { list: 'dels' }),
     h('div', { class: 'grid2' }, inp('resp', 'Відповідальний', { list: 'ctList', placeholder: 'Ім’я, телефон' }), inp('contact', 'Контакт на місці (ім’я, телефон)', { list: 'ctList', placeholder: 'Пан Мюллер, +49 170 1234567' })),
@@ -1853,6 +1866,32 @@ function editSheet(t, opts = {}) {
     foot.unshift(h('button', { class: 'btn ghost', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: () => { closeSheet(); editSheet({ ...collect(), uid: '', car: '', status: 'призначено' }); } }, 'Копія'));
     if (t.status !== 'відмінено') foot.unshift(h('button', { class: 'btn danger', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: e => { if (confirm('Позначити поїздку як відмінену?')) save(e.currentTarget, { status: 'відмінено' }); } }, 'Відмінити'));
   }
+  // Рейс за часом: «17:55» у полі «Рейс» або кнопка — показуємо рейси BER навколо цього часу.
+  const airRe = /BER|аеропорт|airport|flughafen|термінал/i;
+  const flDir = () => airRe.test(f.from.value) && !airRe.test(f.to.value) ? 'Arrival' : airRe.test(f.to.value) ? 'Departure' : 'Arrival';
+  const flFind = async (force) => {
+    if (!d.fl) { flBox.replaceChildren(); return; }
+    const raw = f.flight.value.trim(), tm = (/^(?:о|в|at|um)?\s*(\d{1,2})[:.](\d{2})$/i.exec(raw));
+    if (!force && !tm) { flBox.replaceChildren(raw || !airRe.test(f.from.value + ' ' + f.to.value) || !f.tFrom.value ? h('span') : h('button', { type: 'button', class: 'chipbtn', onclick: () => flFind(true) }, 'Знайти рейс за часом')); return; }
+    const dir = flDir();
+    let time = tm ? hhmm(+tm[1] * 60 + +tm[2]) : null;
+    if (!time) { const m0 = mins(f.tFrom.value); if (m0 == null) return toast('Вкажіть час подачі або час рейсу в полі «Рейс»'); time = hhmm(dir === 'Arrival' ? m0 - 15 : m0 + 120); }
+    flBox.replaceChildren(h('div', { class: 'fl-find-h' }, 'Шукаю ' + (dir === 'Arrival' ? 'прильоти до' : 'вильоти з') + ' BER близько ' + time + '…'));
+    try {
+      const r = await api('flSearch', { date: f.date.value, time, dir });
+      const tmin = mins(time);
+      const list = r.list.map(x => ({ ...x, dm: Math.abs((flMin(x.rev || x.sched) ?? 9999) - tmin) })).sort((a, b) => a.dm - b.dm).slice(0, 8);
+      if (!list.length) return flBox.replaceChildren(h('div', { class: 'fl-find-h' }, 'Біля ' + time + ' рейсів не знайшов. Перевірте час або впишіть номер рейсу.'));
+      flBox.replaceChildren(h('div', { class: 'fl-find-h' }, (dir === 'Arrival' ? 'Прильоти до BER' : 'Вильоти з BER') + ' біля ' + time + ' — оберіть свій:'),
+        ...list.map(x => h('button', { type: 'button', class: 'fl-opt', onclick: () => {
+          f.flight.value = x.no + ', ' + flHM(x.sched); f.flight.classList.remove('sugg'); flBox.replaceChildren(h('div', { class: 'fl-find-ok' }, '✓ ' + x.no + ' · ' + (x.airline || '') + ' · ' + (dir === 'Arrival' ? 'з ' : 'до ') + x.city + ' · ' + flHM(x.sched) + (x.terminal ? ' · T' + x.terminal : '')));
+          if (dir === 'Arrival' && !f.tFrom.value) { f.tFrom.value = hhmm((flMin(x.rev || x.sched) + 20) % 1440); f.tFrom.dispatchEvent(new Event('change')); }
+        } }, h('b', { class: 'num' }, flHM(x.sched)), h('span', null, h('b', null, x.no), ' ' + (dir === 'Arrival' ? 'з ' : 'до ') + (x.city || x.iata), h('small', null, [x.airline, x.rev && flHM(x.rev) !== flHM(x.sched) ? 'очікується ' + flHM(x.rev) : '', x.terminal ? 'термінал ' + x.terminal : '', x.status === 'Canceled' ? 'скасовано' : ''].filter(Boolean).join(' · '))))));
+    } catch (e) { flBox.replaceChildren(h('div', { class: 'fl-find-h' }, e.message)); }
+  };
+  let flT; f.flight.addEventListener('input', () => { clearTimeout(flT); flT = setTimeout(() => flFind(false), 500); });
+  ['from', 'to', 'tFrom'].forEach(k => f[k].addEventListener('change', () => { if (!f.flight.value.trim()) flFind(false); }));
+  setTimeout(() => flFind(false), 50);
   // З повідомлення: розпізнані поля сірі, доки їх не підтвердите чи не зміните.
   if (opts.sugg?.length) {
     body.unshift(h('div', { class: 'ai-note' }, h('b', null, 'Заповнено з повідомлення'), h('span', null, 'Сірі поля — пропозиції. Перевірте, змініть за потреби і збережіть.'),
@@ -2846,20 +2885,33 @@ function flightsView(main) {
 
 // ====== КОТИКИ ======
 const CAT_EMO = ['🐱', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾', '🐈', '🐈‍⬛', '🐾'];
-function catUrl(kind) { return 'https://cataas.com/cat' + (kind === 'gif' ? '/gif' : '') + '?width=480&_=' + Date.now() + Math.random().toString(36).slice(2, 6); }
+// Котики з TheCatAPI (швидкий CDN): тримаємо запас уже завантажених картинок, щоб показувати миттєво.
+const CATS = { pool: [], busy: false, used: 0 };
+function catUrl(kind) { return 'https://cataas.com/cat' + (kind === 'gif' ? '/gif' : '') + '?width=400&_=' + Date.now() + Math.random().toString(36).slice(2, 6); }
+async function catFill(n = 10) {
+  if (CATS.busy || CATS.pool.length >= 8) return; CATS.busy = true;
+  try {
+    const r = await fetch('https://api.thecatapi.com/v1/images/search?limit=' + n + '&mime_types=gif,jpg,png&size=small').then(x => x.json());
+    await Promise.all(r.map(c => new Promise(res => { const im = new Image(); im.decoding = 'async'; im.referrerPolicy = 'no-referrer'; im.onload = () => { CATS.pool.push(c.url); res(); }; im.onerror = res; im.src = c.url; setTimeout(res, 6000); })));
+  } catch {} finally { CATS.busy = false; }
+}
+function catNext() { const u = CATS.pool.length ? CATS.pool.splice(Math.floor(Math.random() * CATS.pool.length), 1)[0] : null; if (CATS.pool.length < 4) catFill(); return u; }
 function catImg(cls, kind = 'gif') {
   const im = h('img', { class: cls, alt: 'Котик', referrerpolicy: 'no-referrer', decoding: 'async' });
   im.onerror = () => { if (!im.dataset.tried) { im.dataset.tried = 1; im.src = catUrl('jpg'); } else im.replaceWith(h('div', { class: cls + ' cat-emo' }, CAT_EMO[Math.floor(Math.random() * CAT_EMO.length)])); };
-  im.src = catUrl(kind);
+  const u = catNext();
+  if (u) im.src = u; else { catFill().then(() => { const u2 = catNext(); im.src = u2 || catUrl(kind); }); }
   return im;
 }
+setTimeout(() => S.token && S.user?.admin && catFill(12), 1500);
 function catFigure() {
   const box = h('div', { class: 'cat-frame' }, h('div', { class: 'cat-load' }, '🐾'));
   const im = catImg('cat-img');
   im.addEventListener('load', () => { box.querySelector('.cat-load')?.remove(); im.classList.add('in'); });
   box.append(im);
-  return h('figure', { class: 'catcase', style: 'margin:0', title: 'Натисніть на котика', role: 'button', tabindex: '0', onclick: e => catParty(e), onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') catParty(); } },
-    box, h('figcaption', null, 'Натисніть на котика'));
+  box.setAttribute('role', 'button'); box.tabIndex = 0; box.title = 'Натисніть на котика';
+  box.addEventListener('click', e => catParty(e)); box.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') catParty(); });
+  return h('figure', { class: 'catcase', style: 'margin:0' }, box, h('figcaption', null, 'Натисніть на котика'));
 }
 // Стікери котиків розлітаються по всьому екрану.
 function catParty(e) {
@@ -2869,8 +2921,8 @@ function catParty(e) {
   const ox = e?.clientX ?? innerWidth / 2, oy = e?.clientY ?? innerHeight / 3;
   const N = innerWidth < 600 ? 34 : 56;
   for (let i = 0; i < N; i++) {
-    const big = Math.random() < .14;
-    const el = big ? catImg('cp-img', Math.random() < .5 ? 'gif' : 'jpg') : h('span', { class: 'cp-emo' }, CAT_EMO[Math.floor(Math.random() * CAT_EMO.length)]);
+    const big = CATS.pool.length > 0 && Math.random() < .16;
+    const el = big ? h('img', { class: 'cp-img', alt: '', src: CATS.pool[Math.floor(Math.random() * CATS.pool.length)], referrerpolicy: 'no-referrer' }) : h('span', { class: 'cp-emo' }, CAT_EMO[Math.floor(Math.random() * CAT_EMO.length)]);
     const ang = Math.random() * Math.PI * 2, dist = 180 + Math.random() * Math.max(innerWidth, innerHeight) * .7;
     const dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist - 120, rot = (Math.random() - .5) * 720, sc = big ? 1 : .7 + Math.random() * 1.3;
     const wrap = h('div', { class: 'cp', style: `left:${ox}px;top:${oy}px;--dx:${dx}px;--dy:${dy}px;--r:${rot}deg;--s:${sc};animation-delay:${Math.random() * 180}ms;animation-duration:${1600 + Math.random() * 1400}ms` }, el);
