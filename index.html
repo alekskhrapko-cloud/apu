@@ -1308,7 +1308,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
   history.replaceState(null, '', location.pathname + location.search);
   let url; try { url = new URL(decodeURIComponent(m[1])); } catch { return; }
   if (url.origin !== 'https://raw.githubusercontent.com' || !url.pathname.startsWith('/alekskhrapko-cloud/apu-media/')) return;
-  const f = url.pathname.split('/').pop(), mm = /^([\w \-]{1,20})\.(gif|mp4|jpg|png)(?:\.txt)?$/i.exec(decodeURIComponent(f)); if (!mm) return;
+  const f = url.pathname.split('/').pop(), mm = /^([\w \-]{1,20})\.(gif|mp4|jpg|png)(\.b64)?(?:\.txt)?$/i.exec(decodeURIComponent(f)); if (!mm) return;
   const code = mm[1], kind = mm[2].toLowerCase(), mime = { gif: 'image/gif', mp4: 'video/mp4', jpg: 'image/jpeg', png: 'image/png' }[kind];
   const go = () => {
     if (!S.user?.admin || !S.data) return setTimeout(go, 500);
@@ -1318,9 +1318,11 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
       btn.disabled = true;
       try {
         st.textContent = 'Отримую файл…';
-        const buf = new Uint8Array(await (await fetch(url.href)).arrayBuffer());
-        let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-        const b64 = btoa(bin), PER = 8 * 45000, session = Math.random().toString(36).slice(2, 12); let start = 0;
+        let b64, size;
+        if (mm[3]) { b64 = (await (await fetch(url.href)).text()).replace(/\s+/g, ''); size = Math.round(b64.length * 3 / 4); }
+        else { const buf = new Uint8Array(await (await fetch(url.href)).arrayBuffer()); let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000)); b64 = btoa(bin); size = buf.length; }
+        const buf = { length: size };
+        const PER = 8 * 45000, session = Math.random().toString(36).slice(2, 12); let start = 0;
         for (let off = 0; off < b64.length; off += PER) { st.textContent = 'Завантажую ' + Math.round(off / b64.length * 100) + '%…'; const r = await api('mediaPut', { session, code, kind, mime, start, data: b64.slice(off, off + PER), last: off + PER >= b64.length, size: buf.length }); start = r.next; }
         delete _media[code + '.' + kind]; S.data.media = S.data.media || {}; S.data.media[code] = [...new Set([...(S.data.media[code] || []), kind])];
         st.textContent = 'Готово: ' + code + '.' + kind + ' (' + Math.round(buf.length / 1024) + ' КБ).'; st.id = 'import-done';
