@@ -837,7 +837,8 @@ function carsView(main, list) {
       h('div', { style: 'display:flex;flex-direction:column;gap:6px' },
         c.phone ? h('a', { class: 'ib', href: tel(c.phone), 'aria-label': 'Подзвонити', html: I.ph }) : null,
         l.length ? h('button', { class: 'ib', 'aria-label': 'Поділитися планом водія', html: I.share, onclick: () => shareSheet(l, { plan: c }) }) : null,
-        h('button', { class: 'ib', 'aria-label': '3D-GIF авто', onclick: () => carGifSheet(c), style: 'font-size:12px;font-weight:800' }, 'GIF'))));
+        h('button', { class: 'ib', 'aria-label': '3D-GIF авто', onclick: () => carGifSheet(c), style: 'font-size:12px;font-weight:800' }, 'GIF'),
+        h('button', { class: 'ib', 'aria-label': 'Медіа авто', onclick: () => mediaSheet(c), style: 'font-size:11px;font-weight:800' + ((S.data.media || {})[c.code] ? ';color:var(--st-done)' : '') }, 'МЕД'))));
   });
   main.append(box);
   fab(main, S.day || d.today);
@@ -1125,6 +1126,7 @@ async function tripImage(t, o) {
   const top = y + 30, bh = 470;
   g.fillStyle = '#fff'; g.beginPath(); g.roundRect ? g.roundRect(40, top, W - 80, bh, 36) : g.rect(40, top, W - 80, bh); g.fill();
   let img = null; if (o.photo && car.photo && /^https?:/.test(car.photo)) img = await loadImg(car.photo);
+  if (!img && o.photo) { const k = ['jpg', 'png'].find(x => hasMedia(car.code, x)); if (k) { try { img = await loadImg(URL.createObjectURL(await getMedia(car.code, k))); } catch {} } }
   if (img) { const iw = 420, ih = Math.min(bh - 60, 300); g.save(); g.beginPath(); g.roundRect ? g.roundRect(70, top + 30, iw, ih, 24) : g.rect(70, top + 30, iw, ih); g.clip(); const sc = Math.max(iw / img.width, ih / img.height); g.drawImage(img, 70 + (iw - img.width * sc) / 2, top + 30 + (ih - img.height * sc) / 2, img.width * sc, img.height * sc); g.restore(); }
   else drawCar(g, 80, top + 70, 400, kindOf(car), colorOf(car));
   const tx = 530; let ty = top + 80;
@@ -1139,13 +1141,59 @@ async function tripImage(t, o) {
   out.getContext('2d').drawImage(cv, 0, 0);
   return new Promise(res => out.toBlob(b => res(b), 'image/png'));
 }
+// Справжня анімація авто із закритої папки (якщо є), інакше — намальована модель.
+const _media = {};
+function hasMedia(code, kind) { return !!(S.data?.media?.[code] || []).includes(kind); }
+async function getMedia(code, kind) {
+  const k = code + '.' + kind;
+  if (!_media[k]) _media[k] = api('media', { code, kind }).then(r => { const bin = atob(r.b64), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: r.mime }); }).catch(e => { delete _media[k]; throw e; });
+  return _media[k];
+}
 function carGifFor(car, trip, o = {}) {
+  if (hasMedia(car.code, 'gif')) return getMedia(car.code, 'gif');
   const lines = [['Водій', car.driver], ['Телефон', o.phone === false ? '' : fmtPhone(car.phone)]];
   if (trip) { lines.push(['Подача', cleanPt(trip.from)]); if (o.buf > 0 && mins(trip.tFrom) != null) lines.push(['Чекатиме з', hhmm(mins(trip.tFrom) - o.buf)]); }
   return Car3D.carGif({
     kind: kindOf(car), color: colorOf(car), title: modelOf(car) || car.code, subtitle: car.color, plate: plateOf(car), lines,
     top: trip ? { big: fmtT(trip.tFrom) + ' · ' + DOW_S[dObj(trip.date).getDay()] + ' ' + dObj(trip.date).getDate() + ' ' + MON[dObj(trip.date).getMonth()], small: 'Трансфер · ' + cleanPt(trip.from).slice(0, 40) } : { big: 'Ваше авто', small: car.driver || '' }
   });
+}
+// Завантаження справжньої анімації / фото авто (координатор). Файл ділиться на частини і пишеться в прихований аркуш таблиці.
+function mediaSheet(car) {
+  const box = h('div');
+  const status = h('div', { class: 'hero-hint', style: 'text-align:left' });
+  const draw = () => {
+    box.replaceChildren();
+    const have = S.data?.media?.[car.code] || [];
+    if (!have.length) box.append(h('div', { class: 'muted', style: 'margin-bottom:10px' }, 'Для цього авто ще немає справжньої анімації чи фото. Зараз у «Поділитися» йде намальована 3D-модель.'));
+    have.forEach(k => {
+      const slot = h('div', { class: 'imgprev' }, h('div', { class: 'muted' }, k.toUpperCase() + ': завантажую…'));
+      box.append(slot);
+      getMedia(car.code, k).then(b => { const u = URL.createObjectURL(b); slot.replaceChildren(k === 'mp4' ? h('video', { src: u, controls: true, muted: true, loop: true, playsinline: true, style: 'width:100%;border-radius:14px' }) : h('img', { src: u, alt: car.code })); }).catch(e => { slot.textContent = e.message; });
+    });
+  };
+  const input = h('input', { type: 'file', accept: '.gif,.mp4,.jpg,.jpeg,.png,image/gif,video/mp4,image/jpeg,image/png', style: 'display:none', onchange: async e => {
+    const f = e.target.files[0]; if (!f) return;
+    const ext = /\.mp4$/i.test(f.name) || f.type === 'video/mp4' ? 'mp4' : /\.gif$/i.test(f.name) || f.type === 'image/gif' ? 'gif' : /\.png$/i.test(f.name) ? 'png' : 'jpg';
+    if (f.size > 8 * 1024 * 1024) return (status.textContent = 'Файл завеликий (макс. 8 МБ).');
+    const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(f); });
+    const CH = 45000, PER = 8 * CH; let start = 0;
+    try {
+      for (let off = 0; off < b64.length; off += PER) {
+        status.textContent = 'Завантажую ' + Math.min(100, Math.round(off / b64.length * 100)) + '%…';
+        const r = await api('mediaPut', { code: car.code, kind: ext, mime: f.type || (ext === 'mp4' ? 'video/mp4' : 'image/' + ext), start, data: b64.slice(off, off + PER), last: off + PER >= b64.length, size: f.size });
+        start = r.next;
+      }
+      delete _media[car.code + '.' + ext];
+      S.data.media = S.data.media || {}; S.data.media[car.code] = [...new Set([...(S.data.media[car.code] || []), ext])];
+      status.textContent = 'Готово: ' + ext.toUpperCase() + ' (' + Math.round(f.size / 1024) + ' КБ). Тепер він іде в «Поділитися».';
+      draw();
+    } catch (x) { status.textContent = 'Помилка: ' + x.message; }
+    e.target.value = '';
+  } });
+  draw();
+  sheet('Медіа авто · ' + car.code, [h('div', { class: 'muted', style: 'margin-bottom:8px' }, 'GIF або MP4 з обертанням авто, або фото (JPG/PNG). Зберігається у вашій таблиці, без публічних посилань.'), box, status],
+    [h('button', { class: 'btn', onclick: () => input.click() }, 'Завантажити файл…'), input]);
 }
 function carGifSheet(car) {
   const st = h('div', { class: 'hero-hint', style: 'text-align:left' }, 'Готую 3D-GIF…'); const pv = h('div', { class: 'imgprev', style: 'max-width:360px;margin:0 auto' });
@@ -1194,6 +1242,8 @@ function shareSheet(list, opt = {}) {
     imgFile = new File([blob], 'transfer-' + list[0].date + '-' + fmtT(list[0].tFrom).replace(':', '') + '.png', { type: 'image/png' });
     prev.replaceChildren(h('img', { src: URL.createObjectURL(blob), alt: 'Картка поїздки' }));
   };
+  let vidFile = null;
+  if (single && car && hasMedia(car.code, 'mp4')) getMedia(car.code, 'mp4').then(b => { vidFile = new File([b], 'avto-' + car.code.replace(/\W/g, '') + '.mp4', { type: 'video/mp4' }); const vb = $('#vidbtn'); if (vb) vb.disabled = false; }).catch(() => {});
   let gifFile = null; const gifState = h('div', { class: 'hero-hint', style: 'text-align:left' });
   const makeGif = async () => {
     if (!single || !car) return;
@@ -1201,14 +1251,14 @@ function shareSheet(list, opt = {}) {
     try {
       const blob = await carGifFor(car, list[0], o);
       gifFile = new File([blob], 'avto-' + (car.code || 'car').replace(/\W/g, '') + '-' + fmtT(list[0].tFrom).replace(':', '') + '.gif', { type: 'image/gif' });
-      gifState.replaceChildren('3D-GIF готовий (' + Math.round(blob.size / 1024) + ' КБ). ', h('a', { href: URL.createObjectURL(blob), target: '_blank' }, 'Переглянути'));
+      gifState.replaceChildren((hasMedia(car.code, 'gif') ? 'Справжня 3D-анімація авто' : '3D-GIF') + ' готовий (' + Math.round(blob.size / 1024) + ' КБ). ', h('a', { href: URL.createObjectURL(blob), target: '_blank' }, 'Переглянути'));
       const b2 = $('#gifbtn'); if (b2) b2.disabled = false;
     } catch (e) { gifState.textContent = 'GIF: ' + e.message; }
   };
   if (single) { body.unshift(prev, gifState); makeImg(); setTimeout(makeGif, 300); [...body].forEach(el => el?.querySelectorAll?.('input,button').forEach(i => i.addEventListener('click', () => setTimeout(() => { makeImg(); makeGif(); }, 50)))); }
   const shareNative = async (withImg) => {
     const data = { text: ta.value };
-    const f = withImg === 'gif' ? gifFile : imgFile;
+    const f = withImg === 'gif' ? gifFile : withImg === 'mp4' ? vidFile : imgFile;
     if (withImg && f && navigator.canShare?.({ files: [f] })) data.files = [f];
     try { await navigator.share(data); } catch (e) { if (e.name !== 'AbortError') copy(); }
   };
@@ -1217,6 +1267,7 @@ function shareSheet(list, opt = {}) {
     car?.phone ? h('a', { class: 'btn ghost', href: '#', onclick: e => { e.currentTarget.href = waHref(ta.value, car.phone); }, target: '_blank', rel: 'noopener', style: 'flex:0 0 auto;width:auto;padding:0 14px' }, 'Водію') : null,
     navigator.share ? h('button', { class: 'btn', onclick: () => shareNative(true) }, single ? 'Картка…' : 'Поділитися…') : null,
     navigator.share && single && car ? h('button', { class: 'btn', id: 'gifbtn', disabled: true, onclick: () => shareNative('gif') }, '3D-GIF…') : null,
+    navigator.share && single && car && hasMedia(car.code, 'mp4') ? h('button', { class: 'btn', id: 'vidbtn', disabled: true, onclick: () => shareNative('mp4') }, 'Відео…') : null,
     h('button', { class: 'btn ghost', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: copy }, 'Копіювати')];
   sheet(opt.day ? 'Розклад дня' : opt.plan ? 'План водія' : 'Поділитися поїздкою', body, foot);
 }
