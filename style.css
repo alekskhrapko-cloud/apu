@@ -839,3 +839,43 @@ body.wide .rbar{left:calc(50% + 120px)}
 .ai-h{display:block!important;font-weight:600;color:var(--muted);font-size:12.5px;margin-bottom:2px}
 .ai-miss{display:block!important;color:#8A5A00;font-size:12.5px;margin-top:4px}
 .tool.ai-t{border-style:dashed}
+
+/* ====== Котик на «Огляді» ====== */
+.catcase{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;align-self:stretch;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
+.cat-frame{position:relative;width:min(300px,100%);aspect-ratio:4/3;border-radius:22px;overflow:hidden;background:#F3EEE8;border:1px solid var(--line);box-shadow:0 10px 30px rgba(40,20,20,.10);transition:transform .45s var(--spring),box-shadow .3s}
+.catcase:hover .cat-frame{transform:rotate(-2deg) scale(1.03);box-shadow:0 16px 40px rgba(40,20,20,.16)}
+.catcase:active .cat-frame{transform:scale(.96)}
+.cat-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transform:scale(1.04);transition:opacity .5s,transform .8s var(--spring)}
+.cat-img.in{opacity:1;transform:none}
+.cat-emo{position:absolute;inset:0;display:grid;place-items:center;font-size:84px}
+.cat-load{position:absolute;inset:0;display:grid;place-items:center;font-size:34px;animation:sp 2.4s linear infinite;opacity:.5}
+.catcase figcaption{font-size:12.5px;color:var(--muted)}
+@media (max-width:859px){.catcase{align-self:center}.catcase .cat-frame{width:130px;border-radius:18px}.catcase figcaption{display:none}.welcome{grid-template-columns:1fr auto;align-items:center}}
+/* ====== Котячий салют ====== */
+.cat-party{position:fixed;inset:0;pointer-events:none;z-index:120;overflow:hidden}
+.cp{position:absolute;transform:translate(-50%,-50%);animation:cpfly 2.4s cubic-bezier(.18,.7,.3,1) both}
+.cp-emo{display:block;font-size:34px;line-height:1;filter:drop-shadow(0 4px 6px rgba(0,0,0,.18))}
+.cp-img{display:block;width:92px;height:92px;object-fit:cover;border-radius:18px;border:3px solid #fff;box-shadow:0 8px 22px rgba(0,0,0,.25)}
+.cp .cat-emo{position:static;font-size:46px}
+@keyframes cpfly{0%{transform:translate(-50%,-50%) scale(.2) rotate(0);opacity:0}12%{opacity:1}70%{opacity:1}100%{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy) + 260px)) scale(var(--s)) rotate(var(--r));opacity:0}}
+/* ====== Радіо: котик і вертикальна панель праворуч ====== */
+.rb-cat{position:relative;width:44px;height:44px;border-radius:12px;overflow:hidden;background:#3A3633;flex:0 0 auto;cursor:pointer}
+.rb-cat-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .6s}
+.rb-cat-img.in{opacity:1}
+.rb-cat .cat-emo{font-size:26px}
+.rb-cat.dance{animation:catbop .9s ease-in-out infinite}
+@keyframes catbop{0%,100%{transform:rotate(-3deg) translateY(0)}50%{transform:rotate(3deg) translateY(-2px)}}
+@media (min-width:900px){
+  .rbar{left:auto!important;right:16px;top:50%;bottom:auto;transform:translateY(-50%);width:176px;flex-direction:column;align-items:stretch;gap:10px;padding:12px;border-radius:22px;animation:rbin .55s var(--spring)}
+  @keyframes rbin{from{transform:translate(30px,-50%);opacity:0}}
+  .rb-cat{width:100%;height:auto;aspect-ratio:1;border-radius:16px}
+  .rb-cat .cat-emo{font-size:64px}
+  .rb-p{align-self:center;width:52px;height:52px}
+  .rb-t{text-align:center}.rb-t b{white-space:normal;line-height:1.25}
+  .rb-eq{align-self:center}
+  .rbar input[type=range]{width:100%}
+  .rb-x{position:absolute;top:4px;right:6px}
+  body.wide main{padding-right:0}
+}
+.rb-t b{color:#fff}
+@media (min-width:900px){body.has-radio .shell{padding-right:200px}}
