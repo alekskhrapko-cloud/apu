@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=37">
+<link rel="stylesheet" href="style.css?v=38">
 </head>
 <body>
 <div id="app"></div>
@@ -488,11 +488,13 @@ function driversView(main) {
   const d = S.data, today = d.today;
   main.append(h('p', { class: 'lead-n' }, 'Відкрийте кабінет будь-якого водія й подивіться, що саме він бачить на своєму телефоні: поїздки на сьогодні й завтра, авто, статус OwnTracks. Змінювати там нічого не можна.'));
   const box = h('div', { class: 'dgrid' });
-  main.append(box);
+  const tgBox = h('div');
+  main.append(tgBox, box);
   const draw = () => {
     box.replaceChildren();
     if (PEEK.err) return box.append(h('div', { class: 'banner err' }, PEEK.err));
     if (!PEEK.list) return box.append(...[0, 1, 2].map(() => h('div', { class: 'dcard sk' })));
+    tgBox.replaceChildren(tgCoordCard(PEEK.list));
     if (!PEEK.list.length) return box.append(h('div', { class: 'empty' }, h('b', null, 'Немає облікових записів водіїв'), 'Додайте водія на аркуші «Доступи» з роллю «водій».'));
     PEEK.list.forEach((u, i) => {
       const mine = t => t.driver ? sameName(t.driver, u.name) : u.cars.includes(t.car);
@@ -507,7 +509,7 @@ function driversView(main) {
         h('div', { class: 'dc-meta' },
           h('span', null, tl.length ? tl.length + ' ' + (tl.length === 1 ? 'поїздка' : tl.length < 5 ? 'поїздки' : 'поїздок') + ' сьогодні' : 'Сьогодні без поїздок'),
           next ? h('span', null, 'Далі: ' + fmtT(next.tFrom) + ' · ' + cleanPt(next.from)) : null),
-        h('div', { class: 'dc-f' }, h('span', { class: 'trkdot ' + trk[0] }, trk[1]), h('span', { class: 'dc-go' }, 'Відкрити кабінет'))));
+        h('div', { class: 'dc-f' }, h('span', { class: 'trkdot ' + trk[0] }, trk[1]), S.data.tg?.bot ? h('span', { class: 'tgdot' + (u.tg ? ' on' : '') }, u.tg ? 'Telegram ✓' : 'без Telegram') : null, h('span', { class: 'dc-go' }, 'Відкрити кабінет'))));
     });
   };
   draw();
@@ -545,6 +547,7 @@ function renderDriver(main) {
   main.append(h('div', { class: 'tools' },
     dayRoute ? h('a', { class: 'tool', href: dayRoute, target: '_blank', rel: 'noopener' }, ico('nav'), 'Маршрут на сьогодні (' + left.length + ' поїзд.)') : null,
     h('button', { class: 'tool', onclick: otSelfOpen }, h('span', { html: I.sig, style: 'display:flex;width:16px;height:16px' }), 'Інструкція OwnTracks'),
+    tgButton(),
     h('button', { class: 'tool', onclick: () => { ls.set('maps', mapsApp() === 'google' ? 'apple' : 'google'); render(); } }, 'Навігація: ' + (mapsApp() === 'google' ? 'Google Maps' : 'Apple Maps')),
     !S.ro && 'Notification' in window && Notification.permission === 'default' ? h('button', { class: 'tool', onclick: () => Notification.requestPermission().then(() => render()) }, 'Увімкнути сповіщення') : null));
   const days = [today, addDays(today, 1)];
@@ -2310,6 +2313,55 @@ function sheetDrag(ov) {
   [grip, bar].forEach(el => el.addEventListener('pointerdown', down));
   addEventListener('pointermove', move, { passive: true }); addEventListener('pointerup', up); addEventListener('pointercancel', up);
   new MutationObserver((_, o) => { if (!ov.isConnected) { removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); o.disconnect(); } }).observe(document.body, { childList: true });
+}
+
+// ====== Telegram ======
+const TG_ICO = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 4.3 2.9 11.5c-1.3.5-1.3 1.2-.2 1.5l4.8 1.5 1.8 5.6c.2.6.4.8.9.8.4 0 .6-.2.9-.4l2.3-2.2 4.7 3.5c.9.5 1.5.2 1.7-.8l3.1-14.6c.3-1.3-.5-1.8-1.4-1.1zM9.4 14.3l8.6-7.7c.4-.3-.1-.5-.6-.2L6.8 13.6"/></svg>';
+function tgButton() {
+  const tg = S.data?.tg; if (!tg?.bot || S.ro) return null;
+  if (tg.linked) return h('button', { class: 'tool tg on', onclick: tgManage }, h('span', { html: TG_ICO, style: 'display:flex;width:16px;height:16px' }), 'Telegram підключено');
+  return h('button', { class: 'tool tg', onclick: tgConnect }, h('span', { html: TG_ICO, style: 'display:flex;width:16px;height:16px' }), 'Підключити Telegram');
+}
+// Відкриваємо вікно одразу (інакше iPhone заблокує), а посилання з кодом підставляємо, коли прийде.
+async function tgConnect() {
+  const w = window.open('about:blank', '_blank');
+  try {
+    const r = await api('tgLink');
+    if (w) w.location.href = r.url; else location.href = r.url;
+    toast('У Telegram натисніть «Start» — і повертайтеся сюди');
+    const t0 = Date.now();
+    const tick = async () => {
+      if (Date.now() - t0 > 180000) return;
+      try { const p = await api('tgPoll'); if (p.linked) { S.data.tg.linked = true; ls.set('data', S.data); render(); toast('Telegram підключено. Нові поїздки приходитимуть туди'); return; } } catch {}
+      setTimeout(tick, document.visibilityState === 'visible' ? 2500 : 5000);
+    };
+    setTimeout(tick, 2500);
+  } catch (e) { w?.close(); toast(e.message); }
+}
+function tgManage() {
+  sheet('Telegram', [h('p', { class: 'lead-n', style: 'margin-top:0' }, S.user?.admin ? 'Сюди приходять коментарі водіїв («Запізнююсь», «Чекаю на місці»).' : 'Сюди приходять нові, змінені й відмінені поїздки — навіть коли застосунок закритий.')], [
+    h('button', { class: 'btn ghost', onclick: async e => { e.currentTarget.disabled = true; try { await api('tgOff'); S.data.tg.linked = false; closeSheet(); render(); toast('Telegram вимкнено'); } catch (x) { toast(x.message); } } }, 'Вимкнути'),
+    h('button', { class: 'btn', onclick: async e => { e.currentTarget.disabled = true; try { await api('tgTest'); toast('Тест надіслано — перевірте Telegram'); } catch (x) { toast(x.message); } e.currentTarget.disabled = false; } }, 'Надіслати тест')]);
+}
+function tgCoordCard(list) {
+  const tg = S.data.tg || {};
+  if (tg.bot) {
+    const n = list.filter(u => u.tg).length;
+    return h('div', { class: 'tgc' }, h('span', { class: 'tgc-i', html: TG_ICO }),
+      h('div', { class: 'tgc-t' }, h('b', null, 'Telegram-бот @' + tg.bot), h('small', null, 'Підключили ' + n + ' з ' + list.length + ' водіїв. Водій підключається сам: «Підключити Telegram» у своєму кабінеті.')),
+      tg.linked ? h('button', { class: 'tool', onclick: tgManage }, 'Мої сповіщення ✓') : h('button', { class: 'tool', onclick: tgConnect }, 'Отримувати коментарі'));
+  }
+  const inp = h('input', { class: 'inp', placeholder: '123456789:AA…', autocomplete: 'off', spellcheck: 'false' });
+  return h('details', { class: 'tgc setup' }, h('summary', null, h('span', { class: 'tgc-i', html: TG_ICO }), h('div', { class: 'tgc-t' }, h('b', null, 'Сповіщення водіям у Telegram'), h('small', null, 'Нові й змінені поїздки приходитимуть водіям навіть із закритим застосунком. Налаштування — 2 хвилини.'))),
+    h('ol', { class: 'tgc-steps' },
+      h('li', null, 'У Telegram відкрийте ', h('a', { href: 'https://t.me/BotFather', target: '_blank', rel: 'noopener' }, '@BotFather'), ' і надішліть /newbot.'),
+      h('li', null, 'Назва — наприклад «Авто ПУ Посольство», ім’я бота — латиницею з «bot» у кінці.'),
+      h('li', null, 'BotFather надішле токен (рядок на кшталт 123456789:AA…). Скопіюйте його сюди:')),
+    h('div', { class: 'tgc-f' }, inp, h('button', { class: 'tool', onclick: async e => {
+      e.currentTarget.disabled = true;
+      try { const r = await api('tgSetup', { botToken: inp.value.trim() }); S.data.tg = { bot: r.bot, linked: false }; inp.value = ''; toast('Бот @' + r.bot + ' підключено'); render(); }
+      catch (x) { toast(x.message); e.currentTarget.disabled = false; }
+    } }, 'Зберегти')));
 }
 
 // ====== Швидкий пошук (⌘K / Ctrl K) ======
