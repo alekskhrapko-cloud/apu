@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=32">
+<link rel="stylesheet" href="style.css?v=33">
 </head>
 <body>
 <div id="app"></div>
@@ -660,13 +660,50 @@ function renderCoord(main) {
   const q = h('input', { class: 'inp search', type: 'search', placeholder: 'Пошук: прізвище, готель, делегація, авто', value: S.q, oninput: e => { S.q = e.target.value; drawList(); } });
   const box = h('div');
   main.append(q, box);
+  // Поїздки «за годинником»: групи за часом подачі (одночасні поїздки — поруч), лінія «зараз»,
+  // минулі приглушені; екран сам тримає поточний час угорі й зсувається кожні 15 хв, поки ви не прокрутили вручну.
+  const isToday = day === d.today;
   function drawList() {
     const needle = S.q.trim().toLowerCase();
     const l = needle ? list.filter(t => [t.from, t.to, t.people, t.deleg, t.car, t.resp, t.flight, t.note, t.route].join(' ').toLowerCase().includes(needle)) : list;
-    box.replaceChildren(...(l.length ? l.map(t => tripCard(t, true, cf.has(t.uid))) : [h('div', { class: 'empty' }, h('b', null, 'Нічого не знайдено'))]));
+    if (!l.length) { box.replaceChildren(h('div', { class: 'empty' }, h('b', null, 'Нічого не знайдено'))); return; }
+    const groups = []; l.forEach(t => { const k = mins(t.tFrom) ?? -1, g = groups[groups.length - 1]; if (g && g.k === k) g.ts.push(t); else groups.push({ k, ts: [t] }); });
+    const now = nowMin(), kids = []; let placed = !isToday;
+    const nowLine = () => h('div', { class: 'nowln', id: 'nowln' }, h('span', null, 'Зараз ' + hhmm(now)));
+    groups.forEach(g => {
+      const endG = Math.max(...g.ts.map(t => (span(t) || [g.k, g.k + 60])[1]));
+      const past = isToday && g.k >= 0 && endG < now && g.ts.every(t => !ACTIVE.includes(t.status));
+      if (!placed && g.k > now) { kids.push(nowLine()); placed = true; }
+      const live = isToday && g.ts.some(t => ACTIVE.includes(t.status));
+      kids.push(h('section', { class: 'slot' + (past ? ' past' : '') + (live ? ' live' : '') },
+        h('div', { class: 'slot-h' }, h('b', { class: 'num' }, g.k >= 0 ? hhmm(g.k) : 'Без часу'), g.ts.length > 1 ? h('span', null, '×' + g.ts.length + ' одночасно') : null),
+        h('div', { class: 'slot-b' + (g.ts.length > 1 ? ' multi' : '') }, ...g.ts.map(t => tripCard(t, true, cf.has(t.uid))))));
+    });
+    if (!placed) kids.push(nowLine());
+    box.replaceChildren(...kids);
   }
   drawList();
   fab(main, day);
+  if (isToday && !S.q) followNow(true);
+}
+// Тримає лінію «зараз» біля верху екрана: одразу, і далі кожні 15 хв (якщо координатор не відкрутив у минуле/майбутнє).
+const FOLLOW = { timer: null, auto: true, y: 0 };
+function followNow(first) {
+  const go = () => { const ln = $('#nowln'); if (!ln) return; const hdr = ($('.top')?.offsetHeight || 120) + 12; const top = ln.getBoundingClientRect().top + scrollY - hdr - 60; FOLLOW.y = Math.max(0, top); scrollTo({ top: FOLLOW.y, behavior: first ? 'auto' : 'smooth' }); };
+  if (first) { FOLLOW.auto = true; requestAnimationFrame(() => requestAnimationFrame(go)); }
+  clearInterval(FOLLOW.timer);
+  FOLLOW.timer = setInterval(() => {
+    if (S.view !== 'list' || !$('#nowln')) return clearInterval(FOLLOW.timer);
+    if (Math.abs(scrollY - FOLLOW.y) > 80) { FOLLOW.auto = false; showNowBtn(); return; }
+    render();
+  }, 15 * 60000);
+  if (!FOLLOW.bound) { addEventListener('scroll', showNowBtn, { passive: true }); FOLLOW.bound = true; }
+}
+function showNowBtn() {
+  let b = $('#tonow');
+  const away = $('#nowln') && S.view === 'list' && Math.abs(scrollY - FOLLOW.y) > 300;
+  if (!away) { b?.remove(); return; }
+  if (!b) document.body.append(h('button', { class: 'tonow', id: 'tonow', onclick: () => { FOLLOW.auto = true; followNow(true); $('#tonow')?.remove(); } }, 'До поточного часу'));
 }
 
 // ====== ОГЛЯД (головний екран координатора) ======
@@ -958,6 +995,7 @@ function presSheet(car, item) {
     h('div', { class: 'muted', style: 'font-size:13px;margin:-6px 0 12px' }, 'Можна вказати лише прибуття (якщо від’їзд ще невідомий) або лише від’їзд. Авто без жодного запису вважається таким, що постійно в Берліні.'),
     list], foot);
   drawList();
+  timeWheel(f.fromT, () => 14 * 60); timeWheel(f.toT, () => 12 * 60);
 }
 
 function trackChip(c) {
@@ -1025,6 +1063,58 @@ async function pickContact() {
   const [c] = await navigator.contacts.select(['name', 'tel'], { multiple: false });
   if (!c) return null;
   return [c.name?.[0], c.tel?.[0]].filter(Boolean).join(', ');
+}
+// ===== Вибір часу «коліщатком»: години та хвилини з кроком 5 хв (без набору на клавіатурі) =====
+const IS_TOUCH = matchMedia('(pointer: coarse)').matches;
+function timeWheel(input, defFn) {
+  const wrap = input.closest('label'); if (!wrap) return;
+  wrap.classList.add('tw-host');
+  if (IS_TOUCH) { input.readOnly = true; input.setAttribute('inputmode', 'none'); }
+  let pop = null;
+  const ITEM = 36;
+  const col = (n, step, fmt) => { const c = h('div', { class: 'tw-col', tabindex: '0' }); c.append(h('div', { class: 'tw-pad' })); for (let i = 0; i < n; i += step) c.append(h('div', { class: 'tw-i', 'data-v': i }, fmt(i))); c.append(h('div', { class: 'tw-pad' })); return c; };
+  const close = () => { pop?.remove(); pop = null; document.removeEventListener('pointerdown', outside, true); };
+  const outside = e => { if (pop && !pop.contains(e.target) && e.target !== input) close(); };
+  const open = () => {
+    if (pop) return;
+    let m = mins(input.value); if (m == null) m = defFn ? defFn() : Math.ceil(nowMin() / 5) * 5;
+    m = Math.round(m / 5) * 5 % 1440;
+    const hc = col(24, 1, i => String(i).padStart(2, '0')), mc = col(60, 5, i => String(i).padStart(2, '0'));
+    const apply = () => {
+      const hi = Math.round(hc.scrollTop / ITEM), mi = Math.round(mc.scrollTop / ITEM);
+      const v = String(Math.min(23, hi)).padStart(2, '0') + ':' + String(Math.min(11, mi) * 5).padStart(2, '0');
+      [...hc.querySelectorAll('.tw-i')].forEach((e, i) => e.classList.toggle('on', i === hi));
+      [...mc.querySelectorAll('.tw-i')].forEach((e, i) => e.classList.toggle('on', i === mi));
+      if (input.value !== v) { input.value = v; input.dispatchEvent(new Event('input', { bubbles: true })); clearTimeout(input._twc); input._twc = setTimeout(() => input.dispatchEvent(new Event('change', { bubbles: true })), 250); }
+    };
+    [hc, mc].forEach(c => {
+      let t; c.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(apply, 90); }, { passive: true });
+      // Коліщатко миші: один «клац» = одна позиція (5 хв для хвилин, 1 год для годин).
+      c.addEventListener('wheel', e => {
+        e.preventDefault();
+        let n = Math.round(c.scrollTop / ITEM) + Math.sign(e.deltaY);
+        // Хвилини «перетікають» у години: 19:55 → 20:00.
+        if (c === mc && (n > 11 || n < 0)) { const hh = (Math.round(hc.scrollTop / ITEM) + (n > 11 ? 1 : -1) + 24) % 24; hc.scrollTop = hh * ITEM; n = n > 11 ? 0 : 11; }
+        c.scrollTop = n * ITEM;
+      }, { passive: false });
+      c.addEventListener('click', e => { const it = e.target.closest('.tw-i'); if (it) c.scrollTo({ top: [...c.querySelectorAll('.tw-i')].indexOf(it) * ITEM, behavior: 'smooth' }); });
+      c.addEventListener('keydown', e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); c.scrollBy({ top: (e.key === 'ArrowDown' ? 1 : -1) * ITEM, behavior: 'smooth' }); } if (e.key === 'Enter' || e.key === 'Escape') close(); });
+    });
+    const quick = h('div', { class: 'tw-q' }, ...[[-15, '−15'], [-5, '−5'], [5, '+5'], [15, '+15']].map(([dlt, l]) => h('button', { type: 'button', onclick: () => {
+      const cur = (mins(input.value) ?? m) + dlt, v = ((cur % 1440) + 1440) % 1440;
+      hc.scrollTo({ top: Math.floor(v / 60) * ITEM, behavior: 'smooth' }); mc.scrollTo({ top: (v % 60) / 5 * ITEM, behavior: 'smooth' });
+    } }, l)));
+    pop = h('div', { class: 'tw' }, h('div', { class: 'tw-cols' }, hc, h('span', { class: 'tw-sep' }, ':'), mc, h('div', { class: 'tw-band' })), quick,
+      h('div', { class: 'tw-f' }, IS_TOUCH ? h('button', { type: 'button', class: 'tw-man', onclick: () => { close(); input.readOnly = false; input.removeAttribute('inputmode'); input.focus(); } }, 'Ввести вручну') : h('span'), h('button', { type: 'button', class: 'chipbtn', onclick: close }, 'Готово')));
+    wrap.append(pop);
+    hc.scrollTop = Math.floor(m / 60) * ITEM; mc.scrollTop = (m % 60) / 5 * ITEM;
+    requestAnimationFrame(apply);
+    setTimeout(() => document.addEventListener('pointerdown', outside, true), 0);
+    pop.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
+  input.addEventListener('click', open);
+  input.addEventListener('focus', () => { if (IS_TOUCH || !input.value) open(); });
+  input.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
 }
 function seatsW(n) { n = Number(n); const m = n % 10, c = n % 100; return n + ' ' + (m === 1 && c !== 11 ? 'місце' : m >= 2 && m <= 4 && (c < 12 || c > 14) ? 'місця' : 'місць'); }
 function samePt(a, b) { a = cleanPt(a).toLowerCase(); b = cleanPt(b).toLowerCase(); return !!a && a === b; }
@@ -1109,6 +1199,8 @@ function editSheet(t) {
     sel('status', 'Статус', (d.statuses || []).map(x => [x, x]))];
   if (t.car && !(d.cars || []).some(c => c.code === t.car)) f.car.append(h('option', { value: t.car }, t.car)), (f.car.value = t.car);
   const collect = () => { const o = { uid: t.uid }; for (const [k, el] of Object.entries(f)) o[k] = el.value.trim(); return o; };
+  timeWheel(f.tFrom, () => Math.ceil(nowMin() / 5) * 5);
+  timeWheel(f.tTo, () => { const a = mins(f.tFrom.value); return a == null ? Math.ceil(nowMin() / 5) * 5 + 60 : a + 60; });
   // --- склад: чипи, підказки, автоматична кількість осіб ---
   const paxHint = h('small', { class: 'pax-h' });
   f.pax.closest('label').append(paxHint);
@@ -1169,6 +1261,13 @@ function editSheet(t) {
         h('span', { class: 'pick-m' }, [x.c.car, x.c.color, x.c.driver].filter(Boolean).join(' · ')),
         h('span', { class: 'pick-s' }, h('b', null, label), ' ', why, x.leaves ? h('span', { class: 'pick-w' }, ' · від’їжджає з Берліна ' + presDT(x.leaves)) : null)));
     });
+    const chosen = r.list.find(x => x.c.code === f.car.value);
+    if (chosen && ['busy', 'drv', 'away', 'small'].includes(chosen.kind)) pick.append(h('div', { class: 'busy-note' },
+      h('b', null, { busy: 'Авто в цей час зайняте', drv: 'Водій у цей час зайнятий', away: 'Водія в цей час немає в Берліні', small: 'Замало місць' }[chosen.kind]),
+      h('span', null, chosen.kind === 'busy' ? chosen.with.map(x => fmtT(x.tFrom) + '–' + hhmm(span(x)[1]) + ' ' + cleanPt(x.from)).join('; ') + '. Зберегти можна — поїздка буде позначена як накладка.'
+        : chosen.kind === 'drv' ? shortName(tripDriver(chosen.drvBusy)) + ' о ' + fmtT(chosen.drvBusy.tFrom) + ' на ' + chosen.drvBusy.car + '. Поставте іншого водія нижче або збережіть з приміткою.'
+        : chosen.kind === 'away' ? (chosen.pr.next ? 'Прибуде ' + presDT(chosen.pr.next.from) + '.' : 'Перевірте дати присутності.')
+        : 'Потрібно ' + r.pax + ', у авто ' + seatsW(chosen.seats) + '.')));
     const other = h('details', { class: 'pick-all' }, h('summary', null, 'Вибрати зі списку'), f.car);
     pick.append(other);
     drawDriver(o, r);
