@@ -298,3 +298,22 @@ a.btn{display:flex;align-items:center;justify-content:center;text-decoration:non
 @media (min-width:900px){.gmain{order:0}}
 .gmap .mapbox{background:#F5F3F0}
 .gmap .mapbox.dk{background:#1c1f24}
+.gc-src{font-size:12.5px;color:var(--muted);margin-top:2px}
+.otc{display:flex;gap:14px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-bottom:10px}
+.otq{flex:0 0 112px;width:112px;height:112px;background:#fff;border-radius:10px;padding:4px}
+.otq svg{width:100%;height:100%;display:block}
+.otb{flex:1;min-width:0}
+.otb b{font-weight:650}
+/* вкладка «Авто»: картки сіткою, анімація авто на всю ширину */
+.carl{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.carl .card{display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0;margin:0}
+.carl .ci{padding:14px 16px 6px}
+.carl .ci b{font-size:16px}
+.carl .tools2{display:flex;gap:8px;padding:8px 16px 16px;margin-top:auto}
+.carl .tools2>span{display:none}
+.carthumb{position:relative;display:block;width:100%;aspect-ratio:720/420;border:0;border-bottom:1px solid var(--line);overflow:hidden;background:#F1F5F9;padding:0;cursor:pointer}
+.carthumb img{position:absolute;left:0;top:0;width:100%}
+.carthumb img.cardcrop{top:-25%}
+.carthumb canvas{position:absolute;left:50%;top:50%;width:62%;transform:translate(-50%,-50%)}
+.carthumb.loading::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);animation:shim 1.2s linear infinite}
+@keyframes shim{from{transform:translateX(-100%)}to{transform:translateX(100%)}}

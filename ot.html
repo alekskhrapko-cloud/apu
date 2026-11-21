@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Авто ПУ: фонова позиція</title>
+<link rel="stylesheet" href="style.css?v=16">
+<style>
+  .ot{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 28px) 20px 40px}
+  .ot h1{font:600 26px/1.15 var(--disp);letter-spacing:-.02em;margin:0 0 6px}
+  .ot .lead{color:var(--muted);margin:0 0 24px}
+  .step{display:grid;grid-template-columns:40px 1fr;gap:4px 14px;padding:18px 0;border-top:1px solid var(--line)}
+  .step b.n{grid-row:span 3;width:40px;height:40px;border-radius:50%;background:var(--ink);color:var(--bg);display:flex;align-items:center;justify-content:center;font:600 17px var(--disp)}
+  .step h2{font-size:17px;margin:6px 0 2px;font-weight:650}
+  .step p{margin:0;color:var(--muted);font-size:15px}
+  .step .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .step .row a{flex:1 1 140px}
+  .bad{background:var(--red-soft);color:var(--red);border-radius:12px;padding:14px}
+</style>
+</head>
+<body>
+<main class="ot" id="ot"></main>
+<script>
+'use strict';
+const box = document.getElementById('ot');
+let d = null;
+try {
+  const b = location.hash.slice(1).replace(/-/g, '+').replace(/_/g, '/');
+  d = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b), c => c.charCodeAt(0))));
+} catch (e) {}
+const esc = s => String(s ?? '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
+const API = 'https://script.google.com/macros/s/AKfycby_EiW3rkzB-XIaQqPVt6BPVP7mh8-fr6v3OdwIfBRiUlZuuS5rS34_6qDjnSlHCK3L/exec';
+if (d && d.u && d.t) {
+  const conf = { _type: 'configuration', mode: 3, url: API + '?u=' + encodeURIComponent(d.u) + '&ot=' + d.t, tid: d.d || 'PU', deviceId: 'apu',
+    monitoring: 1, locatorDisplacement: 100, locatorInterval: 60, pubExtendedData: true, auth: false, cmd: false, allowRemoteLocation: false, sub: false };
+  d.c = btoa(JSON.stringify(conf));
+}
+if (!d || !d.c) {
+  box.innerHTML = '<h1>Посилання неповне</h1><p class="bad">Відкрийте QR-код або посилання, яке надіслав координатор, ще раз повністю.</p>';
+} else {
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const inline = 'owntracks:///config?inline=' + encodeURIComponent(d.c);
+  box.innerHTML = `
+    <div class="plate" aria-hidden="true"><i>D</i><b>0-ПУ</b></div>
+    <h1>${esc(d.n)}, налаштуймо фонову позицію</h1>
+    <p class="lead">Після цього координатор бачитиме ваше авто на карті, навіть коли телефон заблокований. Передачу можна вимкнути в OwnTracks будь-коли.</p>
+    <section class="step"><b class="n">1</b><h2>Встановіть OwnTracks</h2><p>Безкоштовний застосунок, без реклами.</p>
+      <div class="row">
+        <a class="btn ${ios ? '' : 'ghost'}" href="https://apps.apple.com/app/owntracks/id692424691">App Store</a>
+        <a class="btn ${ios ? 'ghost' : ''}" href="https://play.google.com/store/apps/details?id=org.owntracks.android">Google Play</a>
+      </div></section>
+    <section class="step"><b class="n">2</b><h2>Підключіть до Авто ПУ</h2><p>Натисніть кнопку: OwnTracks відкриється і запитає, чи імпортувати налаштування. Погодьтеся.</p>
+      <div class="row"><a class="btn" href="${inline}">Налаштувати OwnTracks</a></div></section>
+    <section class="step"><b class="n">3</b><h2>Дозвольте позицію «Завжди»</h2><p>${ios
+      ? 'iPhone: Параметри → OwnTracks → Геолокація → «Завжди», і ввімкніть «Точна геолокація».'
+      : 'Android: дозвольте доступ до місцезнаходження «Завжди» і вимкніть економію заряду для OwnTracks.'}</p></section>
+    <section class="step"><b class="n">4</b><h2>Під час візиту: режим «Move»</h2><p>${ios
+      ? 'У OwnTracks натисніть значок режиму вгорі й виберіть «Move». Після візиту поверніть «Significant» або «Quiet», щоб берегти батарею.'
+      : 'У OwnTracks відкрийте меню режимів і виберіть «Move». Після візиту поверніть «Significant» або «Quiet».'}</p></section>`;
+}
+</script>
+</body>
+</html>

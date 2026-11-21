@@ -16,7 +16,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/unbounded-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/onest-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=16">
 </head>
 <body>
 <div id="app"></div>
@@ -638,15 +638,37 @@ function timeline(main, list, cf, day) {
 function shortPt(p) { return String(p || '—').replace(URL_RE, '').split(/[,(]/)[0].trim().slice(0, 28); }
 function shortName(n) { const p = String(n || '').split(/\s+/); return p.length > 1 ? p[0] + ' ' + p[1][0] + '.' : n; }
 
+// Мініатюра авто у вкладці «Авто»: справжня анімація/фото, якщо завантажені через «МЕД», інакше — намальований силует.
+// Файли великі (до 5 МБ), тому вантажимо лише коли картка з'являється на екрані, і тримаємо в пам'яті сесії.
+function carThumb(c) {
+  const kind = ['jpg', 'png', 'gif'].find(k => hasMedia(c.code, k));
+  const el = h('button', { class: 'carthumb', 'aria-label': 'Анімація авто ' + (c.driver || c.code), onclick: () => carGifSheet(c) });
+  const draw = () => { const cv = h('canvas', { width: 264, height: 154 }); const g = cv.getContext('2d'); try { drawCar(g, 22, 22, 220, kindOf(c), colorOf(c)); } catch {} el.replaceChildren(cv); };
+  if (!kind) {
+    if (c.photo && /^https?:/.test(c.photo)) el.append(h('img', { src: c.photo, alt: '', loading: 'lazy', style: 'top:0;height:100%;object-fit:cover' }));
+    else draw();
+    return el;
+  }
+  el.classList.add('loading');
+  const go = () => getMedia(c.code, kind).then(b => {
+    const im = h('img', { alt: '' });
+    im.onload = () => { if (im.naturalHeight / im.naturalWidth > 0.8) im.classList.add('cardcrop'); el.classList.remove('loading'); };
+    im.src = URL.createObjectURL(b); el.replaceChildren(im);
+  }).catch(() => { el.classList.remove('loading'); draw(); });
+  if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); go(); } }, { rootMargin: '200px' }); io.observe(el); }
+  else go();
+  return el;
+}
 function carsView(main, list) {
   const d = S.data;
+  main.append(h('div', { class: 'tools', style: 'margin:0 0 10px' }, h('button', { class: 'tool', onclick: otSheet }, ico('nav'), 'Фоновий трекінг (OwnTracks)')));
   const box = h('div', { class: 'carl' });
   (d.cars || []).forEach(c => {
     const l = list.filter(t => t.car === c.code && t.status !== 'відмінено').sort(byTime);
     const cur = l.find(t => t.status === 'в дорозі' || t.status === 'на місці');
     const next = l.find(t => t.status === 'призначено' || t.status === 'прийнято');
     box.append(h('div', { class: 'card' },
-      c.photo && /^https?:/.test(c.photo) ? h('img', { class: 'carimg', src: c.photo, alt: '', loading: 'lazy' }) : null,
+      carThumb(c),
       h('div', { class: 'ci' },
         h('b', null, c.driver || '—'),
         h('span', null, [c.car, c.color, c.seats ? c.seats + ' місць' : ''].filter(Boolean).join(', ') + ' (' + c.code + ')'),
@@ -926,6 +948,7 @@ async function mapView(main, todays) {
       const doing = !cur ? 'Активних поїздок немає' : cur.status === 'на місці' ? 'На місці подачі: ' + cleanPt(cur.from) : cur.status === 'з пасажирами' ? 'Везе до: ' + cleanPt(cur.to) : cur.status === 'в дорозі' ? 'Їде на подачу: ' + cleanPt(cur.from) : 'Далі о ' + fmtT(cur.tFrom) + ': ' + cleanPt(cur.from);
       side.append(h('div', { class: 'gcard' + (MAP.sel === pid(p) ? ' sel' : '') + (stale ? ' stale' : ''), style: '--c:' + col, tabindex: '0', onclick: focus, onkeydown: ev => { if (ev.key === 'Enter') focus(); } },
         h('div', { class: 'gc-h' }, h('span', { class: 'gc-dot' }), h('b', null, p.name || name), h('span', { class: 'sp' }), h('span', { class: 'muted', style: 'font-size:13px' }, agoText(now - p.t))),
+        h('div', { class: 'gc-src' }, p.src === 'ot' ? 'фоновий трекінг' : 'із застосунку', p.batt != null ? ', батарея ' + p.batt + '%' : '', p.batt != null && p.batt < 20 ? h('b', { style: 'color:var(--red)' }, ' (мало)') : ''),
         h('div', { class: 'gc-l' }, doing),
         ei ? h('div', { class: 'gc-eta' + (ei.late ? ' late' : '') }, h('b', { class: 'num' }, ei.lo + '–' + ei.hi + ' хв'), ' прибуття ' + ei.from + '–' + ei.to + (ei.plan != null ? ', план ' + hhmm(ei.plan) : '') + (ei.late ? '. Може запізнитися' : '') + (ei.km ? ' (' + ei.km + ' км)' : '')) :
           e?.err ? h('div', { class: 'gc-l muted' }, e.err) : (cur && carTarget(cur) && !moving ? h('div', { class: 'gc-l muted' }, 'Натисніть, щоб показати маршрут') : null),
@@ -939,6 +962,39 @@ async function mapView(main, todays) {
   clearInterval(MAP.timer); MAP.timer = setInterval(() => { if (S.view === 'map' && document.visibilityState === 'visible' && $('#mapbox')) poll(); else clearInterval(MAP.timer); }, 20000);
   setTimeout(() => E.resize(), 50);
   poll();
+}
+
+// ====== ФОНОВИЙ ТРЕКІНГ (OwnTracks) ======
+// Кожен водій отримує QR: камера телефона відкриває ot.html, звідти — імпорт налаштувань в OwnTracks.
+// Ключ водія лежить лише в #фрагменті посилання, тому не потрапляє на сервер GitHub.
+const OT_PAGE = new URL('ot.html', location.href).href;
+function b64url(str) { const b = new TextEncoder().encode(str); let s = ''; b.forEach(x => s += String.fromCharCode(x)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function otLink(dr) {
+  // Коротке посилання (менший QR): налаштування OwnTracks збирає сама сторінка ot.html.
+  return OT_PAGE + '#' + b64url(JSON.stringify({ n: dr.name, u: dr.login, t: dr.ot, d: (dr.cars[0] || dr.login).replace(/\W/g, '').slice(0, 2).toUpperCase() }));
+}
+async function loadQr() { if (window.qrcode) return; await loadJs('https://unpkg.com/qrcode-generator@1.4.4/qrcode.js'); }
+function qrSvg(text) { const q = qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 4, margin: 2, scalable: true }); }
+async function otSheet() {
+  const body = h('div', null, h('div', { class: 'muted' }, 'Завантажую…'));
+  sheet('Фоновий трекінг', [body], []);
+  let r; try { r = await api('otConfig'); } catch (e) { body.replaceChildren(h('div', { class: 'err' }, e.message)); return; }
+  let qrOk = true; try { await loadQr(); } catch { qrOk = false; }
+  const phoneOf = dr => { const c = (S.data.cars || []).find(c => dr.cars.includes(c.code)); return c?.phone || ''; };
+  const drivers = r.drivers.filter(d => d.role !== 'координатор' && d.role !== 'адмін');
+  body.replaceChildren(
+    h('p', { class: 'muted', style: 'margin:0 0 14px' }, 'Водій сканує свій QR камерою телефона (або відкриває надіслане посилання) і проходить 4 кроки. Після цього його авто видно на карті й коли застосунок закритий. Перед запуском отримайте згоду водія.'),
+    ...drivers.map(dr => {
+      const link = otLink(dr), ph = phoneOf(dr);
+      const msg = 'Добрий день! Щоб координатор бачив ваше авто на карті під час візиту, налаштуйте, будь ласка, OwnTracks за цим посиланням (4 кроки, 2 хвилини):\n' + link;
+      return h('div', { class: 'otc' },
+        qrOk ? h('div', { class: 'otq', html: qrSvg(link) }) : null,
+        h('div', { class: 'otb' },
+          h('b', null, dr.name), h('div', { class: 'muted', style: 'font-size:13px;margin:2px 0 10px' }, (dr.cars.join(', ') || 'без авто') + (ph ? ', ' + fmtPhone(ph) : '')),
+          h('div', { class: 'gc-a' },
+            ph ? h('a', { class: 'tool', href: waHref(msg, ph), target: '_blank', rel: 'noopener' }, 'Надіслати в WhatsApp') : null,
+            h('button', { class: 'tool', onclick: async e => { try { await navigator.clipboard.writeText(link); e.currentTarget.textContent = 'Скопійовано'; } catch { prompt('Посилання для водія:', link); } } }, 'Копіювати посилання'))));
+    }));
 }
 
 // ====== ПОДІЛИТИСЯ ======
