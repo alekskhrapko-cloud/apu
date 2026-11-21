@@ -1178,10 +1178,12 @@ function mediaSheet(car) {
     if (f.size > 8 * 1024 * 1024) return (status.textContent = 'Файл завеликий (макс. 8 МБ).');
     const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(f); });
     const CH = 45000, PER = 8 * CH; let start = 0;
+    const session = Math.random().toString(36).slice(2, 12);
+    upBtn.disabled = true;
     try {
       for (let off = 0; off < b64.length; off += PER) {
         status.textContent = 'Завантажую ' + Math.min(100, Math.round(off / b64.length * 100)) + '%…';
-        const r = await api('mediaPut', { code: car.code, kind: ext, mime: f.type || (ext === 'mp4' ? 'video/mp4' : 'image/' + ext), start, data: b64.slice(off, off + PER), last: off + PER >= b64.length, size: f.size });
+        const r = await api('mediaPut', { session, code: car.code, kind: ext, mime: f.type || (ext === 'mp4' ? 'video/mp4' : 'image/' + ext), start, data: b64.slice(off, off + PER), last: off + PER >= b64.length, size: f.size });
         start = r.next;
       }
       delete _media[car.code + '.' + ext];
@@ -1189,11 +1191,13 @@ function mediaSheet(car) {
       status.textContent = 'Готово: ' + ext.toUpperCase() + ' (' + Math.round(f.size / 1024) + ' КБ). Тепер він іде в «Поділитися».';
       draw();
     } catch (x) { status.textContent = 'Помилка: ' + x.message; }
+    upBtn.disabled = false;
     e.target.value = '';
   } });
+  const upBtn = h('button', { class: 'btn', onclick: () => { if (!upBtn.disabled) input.click(); } }, 'Завантажити файл…');
   draw();
   sheet('Медіа авто · ' + car.code, [h('div', { class: 'muted', style: 'margin-bottom:8px' }, 'GIF або MP4 з обертанням авто, або фото (JPG/PNG). Зберігається у вашій таблиці, без публічних посилань.'), box, status],
-    [h('button', { class: 'btn', onclick: () => input.click() }, 'Завантажити файл…'), input]);
+    [upBtn, input]);
 }
 function carGifSheet(car) {
   const st = h('div', { class: 'hero-hint', style: 'text-align:left' }, 'Готую 3D-GIF…'); const pv = h('div', { class: 'imgprev', style: 'max-width:360px;margin:0 auto' });
