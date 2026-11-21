@@ -296,5 +296,5 @@ a.btn{display:flex;align-items:center;justify-content:center;text-decoration:non
 }
 .gmain{order:-1}
 @media (min-width:900px){.gmain{order:0}}
-.gmap .leaflet-tile-pane{filter:saturate(.7) brightness(1.03) contrast(.96)}
-.gmap .mapbox.dk .leaflet-tile-pane{filter:invert(.92) hue-rotate(180deg) saturate(.5) brightness(.95)}
+.gmap .mapbox{background:#F5F3F0}
+.gmap .mapbox.dk{background:#1c1f24}

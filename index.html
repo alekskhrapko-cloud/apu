@@ -16,7 +16,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/unbounded-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/onest-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 <div id="app"></div>
@@ -655,8 +655,8 @@ function carsView(main, list) {
             next ? h('span', { class: 'chip' }, 'далі: ' + fmtT(next.tFrom) + ' ' + shortPt(next.from)) : h('span', { class: 'chip' }, 'вільний'),
           ' ', h('span', { class: 'chip' }, l.length + ' поїзд.'))),
       h('div', { class: 'tools2' },
-        c.phone ? h('a', { class: 'ib', href: tel(c.phone), 'aria-label': 'Подзвонити', html: I.ph }) : null,
-        l.length ? h('button', { class: 'ib', 'aria-label': 'Поділитися планом водія', html: I.share, onclick: () => shareSheet(l, { plan: c }) }) : null,
+        c.phone ? h('a', { class: 'ib', href: tel(c.phone), 'aria-label': 'Подзвонити', html: I.ph }) : h('span'),
+        l.length ? h('button', { class: 'ib', 'aria-label': 'Поділитися планом водія', html: I.share, onclick: () => shareSheet(l, { plan: c }) }) : h('span'),
         h('button', { class: 'ib', 'aria-label': '3D-GIF авто', onclick: () => carGifSheet(c), style: 'font-size:12px;font-weight:800' }, 'GIF'),
         h('button', { class: 'ib', 'aria-label': 'Медіа авто', onclick: () => mediaSheet(c), style: 'font-size:11px;font-weight:800' + ((S.data.media || {})[c.code] ? ';color:var(--st-done)' : '') }, 'МЕД'))));
   });
@@ -761,12 +761,30 @@ function editSheet(t) {
 
 // ====== КАРТА (координатор) ======
 const MAP = { map: null, layer: null, fitted: false, timer: null, pos: [] };
-function loadLeaflet() {
-  if (window.L) return Promise.resolve();
-  return new Promise((res, rej) => {
-    const css = h('link', { rel: 'stylesheet', href: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' }); document.head.append(css);
-    const sc = h('script', { src: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js' }); sc.onload = res; sc.onerror = () => rej(new Error('Не вдалося завантажити карту')); document.head.append(sc);
-  });
+function loadJs(src) { return new Promise((res, rej) => { const sc = h('script', { src }); sc.onload = res; sc.onerror = () => rej(new Error('Не вдалося завантажити карту')); document.head.append(sc); }); }
+async function loadLeaflet() {
+  if (!window.L) {
+    document.head.append(h('link', { rel: 'stylesheet', href: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' }));
+    await loadJs('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
+  }
+  // Векторна підкладка (OpenFreeMap, без ключа) — виглядає як сучасні карти Google. Якщо не вийде — растрова Esri.
+  if (!window.maplibregl && !MAP.noVector) {
+    try {
+      document.head.append(h('link', { rel: 'stylesheet', href: 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css' }));
+      await loadJs('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js');
+      await loadJs('https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js');
+    } catch (e) { MAP.noVector = true; }
+  }
+}
+function baseLayer(dark) {
+  const webgl = (() => { try { return !!document.createElement('canvas').getContext('webgl2') || !!document.createElement('canvas').getContext('webgl'); } catch { return false; } })();
+  if (window.maplibregl && L.maplibreGL && webgl && !MAP.noVector) {
+    const lyr = L.maplibreGL({ style: 'https://tiles.openfreemap.org/styles/' + (dark ? 'dark' : 'liberty'), attributionControl: false });
+    // Назви міст і районів українською, де вони є (як у Google), вулиці — місцевою мовою.
+    setTimeout(() => { try { const m = lyr.getMaplibreMap(); m.on('styledata', () => { if (m._uaDone) return; m._uaDone = true; m.getStyle().layers.forEach(l => { if (l.type === 'symbol' && l.layout?.['text-field'] && /place|poi/.test(l.id)) m.setLayoutProperty(l.id, 'text-field', ['coalesce', ['get', 'name:uk'], ['get', 'name']]); }); }); } catch {} }, 0);
+    return lyr;
+  }
+  return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri' });
 }
 function agoText(ms) { const m = Math.round(ms / 60000); return m < 1 ? 'щойно' : m < 60 ? m + ' хв тому' : Math.floor(m / 60) + ' год ' + (m % 60) + ' хв тому'; }
 // Карта в стилі Google: чиста підкладка CARTO Voyager, маршрут синьою лінією від авто до точки, пін точки з часом прибуття.
@@ -799,7 +817,8 @@ async function mapView(main, todays) {
   const dark = matchMedia('(prefers-color-scheme: dark)').matches;
   MAP.map = L.map(box, { zoomControl: false, attributionControl: true }).setView([52.515, 13.39], 11);
   L.control.zoom({ position: 'bottomright' }).addTo(MAP.map);
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri' }).addTo(MAP.map);
+  baseLayer(dark).addTo(MAP.map);
+  MAP.map.attributionControl.addAttribution('&copy; OpenStreetMap, OpenFreeMap');
   box.classList.toggle('dk', dark);
   MAP.layer = L.layerGroup().addTo(MAP.map);
   const fitAll = () => { const b = []; MAP.layer.eachLayer(l => { if (l.getLatLng) b.push(l.getLatLng()); else if (l.getLatLngs) b.push(...l.getLatLngs()); }); if (b.length) MAP.map.fitBounds(b, { padding: [50, 50], maxZoom: 15 }); };
