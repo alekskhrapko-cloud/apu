@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=24">
 </head>
 <body>
 <div id="app"></div>
@@ -639,7 +639,8 @@ function homeView(main, list, cf, day) {
   const endOf = t => { const sp = span(t); return sp ? sp[1] : mins(t.tFrom); };
   const busyNow = new Set(active.map(t => t.car));
   const hasLeft = new Set(live.filter(t => t.status !== 'завершено' && !ACTIVE.includes(t.status) && (!isToday || (endOf(t) ?? 9999) >= now)).map(t => t.car));
-  const freeNow = cars.filter(c => !busyNow.has(c.code));
+  const inBerlin = cars.filter(c => presAt(c.code, day + 'T' + (isToday ? hhmm(now) : '12:00')).state !== 'out');
+  const freeNow = inBerlin.filter(c => !busyNow.has(c.code));
   const dt = dObj(day);
   const wrap = h('div', { class: 'home' });
 
@@ -662,7 +663,7 @@ function homeView(main, list, cf, day) {
   wrap.append(h('div', { class: 'kpis' },
     kpi('road', live.length, 'Поїздок', h('small', null, h('i', { class: done ? '' : 'n' }), done ? 'завершено ' + done : 'ще не почались'), () => setView('list')),
     kpi('pin', active.length, 'У дорозі зараз', posSmall, () => setView('map')),
-    kpi('fleet', freeNow.length, 'Вільні авто', h('small', null, h('i', { class: freeNow.length ? '' : 'w' }), 'з ' + cars.length + ' у довіднику'), () => setView('cars')),
+    kpi('fleet', freeNow.length, 'Вільні авто', h('small', null, h('i', { class: freeNow.length ? '' : 'w' }), (inBerlin.length < cars.length ? 'у Берліні ' + inBerlin.length + ' з ' + cars.length : 'з ' + cars.length + ' у довіднику')), () => setView('cars')),
     kpi('user', dlg.length, dlg.length === 1 ? 'Делегація' : 'Делегації', h('small', null, h('i', { class: 'n' }), 'у програмі дня'), () => setView('list')),
     kpi('bell', alerts, 'Потребують уваги', h('small', null, h('i', { class: alerts ? 'r' : '' }), alerts ? 'дивіться нижче' : 'усе гаразд'), () => $('#alerts')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), alerts ? 'alert' : '')));
   if (isToday) api('positions').then(r => { const fresh = (r.positions || []).filter(p => Date.now() - p.t < 15 * 60000).length; posSmall.replaceChildren(h('i', { class: fresh ? '' : 'n' }), fresh ? 'на карті ' + fresh : 'ніхто не передає позицію'); }).catch(() => posSmall.replaceChildren(h('i', { class: 'n' }), 'позиції недоступні'));
@@ -833,10 +834,90 @@ function carThumb(c) {
   else go();
   return el;
 }
+// ===== Присутність водіїв у Берліні =====
+// Періоди «прибуття — від'їзд» по авто. Авто без жодного періоду вважаємо таким, що базується в Берліні.
+function presList(code) { return (S.data.presence || []).filter(p => p.car === code).sort((a, b) => (a.from || '').localeCompare(b.from || '')); }
+function presAt(code, iso) {
+  const l = presList(code); if (!l.length) return { state: 'base' };
+  const e = l.find(p => (!p.from || p.from <= iso) && (!p.to || iso <= p.to));
+  if (e) return { state: 'in', e };
+  const next = l.find(p => p.from && p.from > iso), prev = l.filter(p => p.to && p.to < iso).pop();
+  return { state: 'out', next, prev };
+}
+function presDT(iso) { if (!iso) return ''; const [dd, tt] = iso.split('T'); return dd.slice(8, 10) + '.' + dd.slice(5, 7) + (tt && tt !== '00:00' ? ' ' + tt : ''); }
+function presChip(code, iso) {
+  const r = presAt(code, iso);
+  if (r.state === 'base') return null;
+  if (r.state === 'in') return h('span', { class: 'chip pres in' }, 'у Берліні' + (r.e.to ? ' до ' + presDT(r.e.to) : ''));
+  return h('span', { class: 'chip pres out' }, r.next ? 'прибуде ' + presDT(r.next.from) : 'не в Берліні');
+}
+function presPanel(main) {
+  const d = S.data, days = innerWidth < 640 ? 7 : 14, start = S.day || d.today;
+  const t0 = new Date(start + 'T00:00:00').getTime(), span = days * 864e5;
+  const pos = iso => Math.max(0, Math.min(1, (new Date(iso).getTime() - t0) / span));
+  const nowIso = d.today + 'T' + hhmm(nowMin());
+  const head = h('div', { class: 'pt-days' }, ...[...Array(days)].map((_, i) => { const dd = addDays(start, i); const w = new Date(dd + 'T12:00:00').getDay(); return h('span', { class: (w === 0 || w === 6 ? 'we' : '') + (dd === d.today ? ' td' : '') }, dd.slice(8, 10)); }));
+  const rows = (d.cars || []).map(c => {
+    const l = presList(c.code);
+    const bar = h('div', { class: 'pt-bar' + (l.length ? '' : ' base') });
+    if (l.length) l.forEach(p => {
+      const a = p.from ? pos(p.from) : 0, b = p.to ? pos(p.to) : 1;
+      if (b <= 0 || a >= 1 || b <= a) return;
+      bar.append(h('i', { style: `left:${a * 100}%;width:${(b - a) * 100}%`, title: (p.from ? presDT(p.from) : '…') + ' – ' + (p.to ? presDT(p.to) : '…') + (p.note ? '\n' + p.note : '') }));
+    });
+    const st = presChip(c.code, nowIso);
+    return h('button', { class: 'pt-row', type: 'button', onclick: () => presSheet(c) },
+      h('span', { class: 'pt-l' }, h('b', null, c.code), h('small', null, shortName(c.driver || ''))), bar,
+      h('span', { class: 'pt-s' }, st || h('span', { class: 'chip pres base' }, 'постійно')));
+  });
+  main.append(h('section', { class: 'panel pres-panel', style: '--n:' + days },
+    h('div', { class: 'pp-h' }, h('div', null, h('h3', null, 'Присутність у Берліні'), h('small', { class: 'muted' }, 'Коли водії прибувають і від’їжджають. Підбір авто враховує ці дати.')),
+      h('button', { class: 'chipbtn', type: 'button', onclick: () => presSheet(null) }, '+ Прибуття / від’їзд')),
+    h('div', { class: 'pt' }, h('div', { class: 'pt-row pt-hd' }, h('span', { class: 'pt-l' }), head, h('span', { class: 'pt-s' })), ...rows)));
+}
+function presSheet(car, item) {
+  const d = S.data;
+  const it = item || { car: car ? car.code : '', from: '', to: '', note: '' };
+  const f = {};
+  f.car = h('select', { class: 'inp' }, [['', '— оберіть авто —'], ...(d.cars || []).map(c => [c.code, c.code + ' · ' + (c.driver || '')])].map(([v, l]) => h('option', { value: v }, l)));
+  f.car.value = it.car || '';
+  const dt = (k, label) => { const [dd, tt] = (it[k] || '').split('T'); f[k + 'D'] = h('input', { class: 'inp', type: 'date', value: dd || '' }); f[k + 'T'] = h('input', { class: 'inp', inputmode: 'numeric', placeholder: '14:00', value: tt && tt !== '00:00' ? tt : '' }); return h('div', { class: 'grid2' }, h('label', { class: 'fld' }, h('span', null, label + ', дата'), f[k + 'D']), h('label', { class: 'fld' }, h('span', null, 'час'), f[k + 'T'])); };
+  f.note = h('input', { class: 'inp', value: it.note || '', placeholder: 'напр. з Мюнхена на візит ПМУ' });
+  const list = h('div', { class: 'pres-list' });
+  const drawList = () => {
+    list.replaceChildren();
+    const l = presList(f.car.value); if (!l.length || item) return;
+    list.append(h('div', { class: 'muted', style: 'font-size:13px;margin:4px 0 6px' }, 'Уже внесено:'));
+    l.forEach(p => list.append(h('button', { type: 'button', class: 'pres-it', onclick: () => { closeSheet(); presSheet(null, p); } },
+      h('b', null, (p.from ? presDT(p.from) : '…') + ' – ' + (p.to ? presDT(p.to) : '…')), p.note ? h('span', null, p.note) : null, h('em', null, 'змінити'))));
+  };
+  f.car.addEventListener('change', drawList);
+  const val = k => { const dd = f[k + 'D'].value; if (!dd) return ''; const m = mins(f[k + 'T'].value); return dd + 'T' + (m == null ? '00:00' : hhmm(m)); };
+  const save = async (btn, del) => {
+    const o = { id: it.id || '', car: f.car.value, from: val('from'), to: val('to'), note: f.note.value.trim(), del: !!del };
+    if (!del && !o.car) return toast('Оберіть авто');
+    if (!del && !o.from && !o.to) return toast('Вкажіть прибуття або від’їзд');
+    btn.disabled = true;
+    try { await api('presSave', { item: o }); closeSheet(); toast(del ? 'Видалено' : 'Збережено'); await load(); }
+    catch (x) { toast(x.message); btn.disabled = false; }
+  };
+  const foot = [h('button', { class: 'btn', onclick: e => save(e.currentTarget) }, 'Зберегти')];
+  if (it.id) foot.unshift(h('button', { class: 'btn danger', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: e => { if (confirm('Видалити цей період?')) save(e.currentTarget, true); } }, 'Видалити'));
+  sheet(it.id ? 'Змінити період' : 'Прибуття / від’їзд', [
+    h('label', { class: 'fld' }, h('span', null, 'Авто і водій'), f.car),
+    dt('from', 'Прибуття до Берліна'), dt('to', 'Від’їзд з Берліна'),
+    h('label', { class: 'fld' }, h('span', null, 'Примітка'), f.note),
+    h('div', { class: 'muted', style: 'font-size:13px;margin:-6px 0 12px' }, 'Можна вказати лише прибуття (якщо від’їзд ще невідомий) або лише від’їзд. Авто без жодного запису вважається таким, що постійно в Берліні.'),
+    list], foot);
+  drawList();
+}
+
 function carsView(main, list) {
   const d = S.data;
   if (SHOW_OT) main.append(h('div', { class: 'tools', style: 'margin:0 0 10px' }, h('button', { class: 'tool', onclick: otSheet }, ico('nav'), 'Фоновий трекінг (OwnTracks)')));
+  presPanel(main);
   const box = h('div', { class: 'carl' });
+  const nowIso = (S.day && S.day !== d.today ? S.day + 'T12:00' : d.today + 'T' + hhmm(nowMin()));
   (d.cars || []).forEach(c => {
     const l = list.filter(t => t.car === c.code && t.status !== 'відмінено').sort(byTime);
     const cur = l.find(t => t.status === 'в дорозі' || t.status === 'на місці');
@@ -849,7 +930,7 @@ function carsView(main, list) {
         h('div', { style: 'margin-top:6px;font-size:14px' },
           cur ? h('span', { class: 'chip st', style: '--c:' + ST_COL[cur.status] }, cur.status + ', ' + fmtT(cur.tFrom) + ' ' + shortPt(cur.to)) :
             next ? h('span', { class: 'chip' }, 'далі: ' + fmtT(next.tFrom) + ' ' + shortPt(next.from)) : h('span', { class: 'chip' }, 'вільний'),
-          ' ', h('span', { class: 'chip' }, l.length + ' поїзд.'))),
+          ' ', h('span', { class: 'chip' }, l.length + ' поїзд.'), ' ', presChip(c.code, nowIso))),
       h('div', { class: 'tools2' },
         c.phone ? h('a', { class: 'ib', href: tel(c.phone), 'aria-label': 'Подзвонити', html: I.ph }) : h('span'),
         l.length ? h('button', { class: 'ib', 'aria-label': 'Поділитися планом водія', html: I.share, onclick: () => shareSheet(l, { plan: c }) }) : h('span'),
@@ -878,18 +959,21 @@ function rankCars(d, o, selfUid) {
     const hit = day.map(x => [x, span(x)]).filter(([, s2]) => s2 && s2[0] < sp[1] + 15 && sp[0] - 15 < s2[1]).map(([x]) => x);
     const poolable = x => { const s2 = span(x); return s2 && Math.abs(s2[0] - sp[0]) <= 20 && (samePt(x.from, o.from) || samePt(x.to, o.to)); };
     let kind, freeSeats = seats;
+    const pr = presAt(c.code, o.date + 'T' + hhmm(sp[0])), prEnd = presAt(c.code, o.date + 'T' + hhmm(Math.min(sp[1], 1439)));
+    if (pr.state === 'out') return { c, seats, kind: 'away', with: [], freeSeats, dayCount: day.length, pr };
+    const leaves = pr.state === 'in' && prEnd.state === 'out' ? pr.e.to : '';
     if (!hit.length) kind = seats && seats < pax ? 'small' : 'free';
     else if (hit.every(poolable)) {
       const used = hit.reduce((a, x) => a + Math.max(1, Number(x.pax) || 1), 0);
       freeSeats = seats - used; kind = !seats || freeSeats >= pax ? 'pool' : 'busy';
     } else kind = 'busy';
-    return { c, seats, kind, with: hit.sort((a, b) => span(a)[0] - span(b)[0]), freeSeats, dayCount: day.length };
+    return { c, seats, kind, with: hit.sort((a, b) => span(a)[0] - span(b)[0]), freeSeats, dayCount: day.length, leaves };
   });
-  const order = { pool: 0, free: 1, small: 2, busy: 3 };
+  const order = { pool: 0, free: 1, small: 2, busy: 3, away: 4 };
   list.sort((a, b) => order[a.kind] - order[b.kind] || (a.kind === 'free' ? (a.seats - b.seats) || (a.dayCount - b.dayCount) : 0) || (a.kind === 'pool' ? b.freeSeats - a.freeSeats : 0));
   // Краще підсадити в авто, що вже їде туди ж (мінібус із запасом місць), ніж займати ще одне.
   // Легкові на 3 місця (авто Посла тощо) автоматично не підсаджуємо — лише вручну.
-  const pool = list.find(x => x.kind === 'pool' && x.seats > 3), free = list.find(x => x.kind === 'free');
+  const pool = list.find(x => x.kind === 'pool' && x.seats > 3), free = list.find(x => x.kind === 'free' && x.seats > 3) || list.find(x => x.kind === 'free');
   const best = pool || free || null;
   if (best) list.splice(list.indexOf(best), 1), list.unshift(best);
   return { list, best, pax };
@@ -944,15 +1028,16 @@ function editSheet(t) {
     const choose = x => { f.car.value = x.c.code; poolNote = x.kind === 'pool' ? 'Спільно з поїздкою ' + fmtT(x.with[0].tFrom) + ' (' + [cleanPt(x.with[0].from), cleanPt(x.with[0].to)].filter(Boolean).join(' → ') + ')' : ''; drawAvail(); };
     r.list.forEach(x => {
       const on = f.car.value === x.c.code;
-      const label = { free: 'Вільне', pool: 'Можна об\'єднати', busy: 'Зайняте', small: 'Мало місць' }[x.kind];
+      const label = { free: 'Вільне', pool: 'Можна об\'єднати', busy: 'Зайняте', small: 'Мало місць', away: 'Не в Берліні' }[x.kind];
       const why = x.kind === 'pool' ? 'з поїздкою ' + fmtT(x.with[0].tFrom) + ' ' + [cleanPt(x.with[0].from), cleanPt(x.with[0].to)].filter(Boolean).join(' → ') + ' · вільно ' + x.freeSeats + ' з ' + x.seats
         : x.kind === 'busy' ? fmtT(x.with[0].tFrom) + '–' + hhmm(span(x.with[0])[1]) + ' ' + cleanPt(x.with[0].from)
+        : x.kind === 'away' ? (x.pr.next ? 'прибуде ' + presDT(x.pr.next.from) : x.pr.prev ? 'поїхав ' + presDT(x.pr.prev.to) : 'немає періоду на цю дату')
         : x.kind === 'small' ? seatsW(x.seats) + ', потрібно ' + r.pax
         : (x.dayCount ? x.dayCount + ' поїзд. цього дня' : 'цього дня без поїздок') + (x.seats ? ' · ' + seatsW(x.seats) : '');
       pick.append(h('button', { type: 'button', class: 'pick-i k-' + x.kind + (on ? ' sel' : ''), onclick: () => choose(x) },
         h('span', { class: 'pick-c' }, x.c.code, r.best === x ? h('em', null, 'рекомендую') : null),
         h('span', { class: 'pick-m' }, [x.c.car, x.c.color, x.c.driver].filter(Boolean).join(' · ')),
-        h('span', { class: 'pick-s' }, h('b', null, label), ' ', why)));
+        h('span', { class: 'pick-s' }, h('b', null, label), ' ', why, x.leaves ? h('span', { class: 'pick-w' }, ' · від’їжджає з Берліна ' + presDT(x.leaves)) : null)));
     });
     const other = h('details', { class: 'pick-all' }, h('summary', null, 'Вибрати зі списку'), f.car);
     pick.append(other);
