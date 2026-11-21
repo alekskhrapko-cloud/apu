@@ -1299,6 +1299,38 @@ setInterval(() => { if (S.token && document.visibilityState === 'visible' && !$(
 document.addEventListener('visibilitychange', () => { if (S.token && document.visibilityState === 'visible' && Date.now() - (S.loadedAt || 0) > 20000) load(); });
 addEventListener('online', () => S.token && load());
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+// ====== імпорт медіа з приватного репозиторію GitHub ======
+// Вкладка з файлом (raw.githubusercontent.com/alekskhrapko-cloud/apu-media/…/DUSS.gif) відкриває застосунок з #media=<адреса файлу>.
+// Застосунок у сесії координатора забирає файл і кладе в аркуш «Медіа». Інші адреси ігноруються.
+(function mediaImport() {
+  const m = /^#media=(.+)$/.exec(location.hash); if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  let url; try { url = new URL(decodeURIComponent(m[1])); } catch { return; }
+  if (url.origin !== 'https://raw.githubusercontent.com' || !url.pathname.startsWith('/alekskhrapko-cloud/apu-media/')) return;
+  const f = url.pathname.split('/').pop(), mm = /^([\w \-]{1,20})\.(gif|mp4|jpg|png)$/i.exec(decodeURIComponent(f)); if (!mm) return;
+  const code = mm[1], kind = mm[2].toLowerCase(), mime = { gif: 'image/gif', mp4: 'video/mp4', jpg: 'image/jpeg', png: 'image/png' }[kind];
+  const go = () => {
+    if (!S.user?.admin || !S.data) return setTimeout(go, 500);
+    const car = (S.data.cars || []).find(c => c.code === code);
+    const st = h('div', { class: 'hero-hint', style: 'text-align:left' }, 'Готово до завантаження.');
+    const btn = h('button', { class: 'btn', onclick: async () => {
+      btn.disabled = true;
+      try {
+        st.textContent = 'Отримую файл…';
+        const buf = new Uint8Array(await (await fetch(url.href)).arrayBuffer());
+        let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+        const b64 = btoa(bin), PER = 8 * 45000, session = Math.random().toString(36).slice(2, 12); let start = 0;
+        for (let off = 0; off < b64.length; off += PER) { st.textContent = 'Завантажую ' + Math.round(off / b64.length * 100) + '%…'; const r = await api('mediaPut', { session, code, kind, mime, start, data: b64.slice(off, off + PER), last: off + PER >= b64.length, size: buf.length }); start = r.next; }
+        delete _media[code + '.' + kind]; S.data.media = S.data.media || {}; S.data.media[code] = [...new Set([...(S.data.media[code] || []), kind])];
+        st.textContent = 'Готово: ' + code + '.' + kind + ' (' + Math.round(buf.length / 1024) + ' КБ).'; st.id = 'import-done';
+        render();
+      } catch (e) { st.textContent = 'Помилка: ' + e.message; btn.disabled = false; }
+    } }, 'Завантажити в застосунок');
+    sheet('Імпорт медіа', [h('div', { style: 'font-weight:700;margin-bottom:4px' }, code + '.' + kind), h('div', { class: 'muted', style: 'margin-bottom:10px' }, car ? [modelOf(car) || car.code, plateOf(car), car.driver].filter(Boolean).join(', ') : 'Увага: авто з кодом ' + code + ' немає в довіднику'), st], [btn]);
+  };
+  go();
+})();
 </script>
 </body>
 </html>
