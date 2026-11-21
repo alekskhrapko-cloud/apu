@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=24">
+<link rel="stylesheet" href="style.css?v=25">
 </head>
 <body>
 <div id="app"></div>
@@ -202,12 +202,17 @@ function logout(msg) {
   renderLogin(msg || '');
 }
 
-async function load(range) {
+async function load(range, quiet) {
   if (S.loading) return;
   S.loading = true; paintBusy();
+  let same = false;
   try {
     const d = await api('data', range || (S.user?.admin && S.data ? { from: S.data.from, to: S.data.to } : {}));
     if (!range) notifyNew(S.data, d);
+    // Фонове оновлення без змін у даних не перебудовує екран (не перезапускає анімації, не смикає прокрутку).
+    const sig = JSON.stringify({ ...d, now: 0 });
+    same = quiet && sig === S.sig && !S.error;
+    S.sig = sig;
     S.data = d; S.user = d.user; S.loadedAt = Date.now(); S.error = ''; S.offline = false;
     if (!S.day || (S.day < d.from || S.day > d.to)) S.day = d.today;
     if (!S.seen) { S.seen = {}; d.trips.forEach(t => S.seen[t.uid] = tripHash(t)); ls.set('seen', S.seen); }
@@ -216,7 +221,7 @@ async function load(range) {
     S.error = e.message; S.offline = !navigator.onLine || /fetch|network|Load failed/i.test(e.message);
   } finally {
     S.loading = false;
-    if (S.token) render();
+    if (S.token) { if (same) { paintBusy(); const u = $('#upd'); if (u) u.textContent = 'оновлено о ' + hhmm(nowMin()); } else render(); }
   }
 }
 function paintBusy() { const b = $('#refresh'); if (b) b.classList.toggle('spin', S.loading); }
@@ -309,7 +314,7 @@ function render() {
     h('div', { class: 'top-row' },
       h('div', { style: 'flex:1;min-width:0' },
         h('h1', null, coord ? (VIEW_TITLE[S.view] || 'Координація авто') : (S.user?.name || 'Мої поїздки')),
-        h('div', { class: 'sub' }, h('span', null, coord ? S.user?.name : carsLine()), h('span', null, updated))),
+        h('div', { class: 'sub' }, h('span', null, coord ? S.user?.name : carsLine()), h('span', { id: 'upd' }, updated))),
       h('button', { class: 'ib' + (S.loading ? ' spin' : ''), id: 'refresh', 'aria-label': 'Оновити', title: 'Оновити', html: I.ref, onclick: () => load() }),
       h('button', { class: 'ib out', 'aria-label': 'Вийти', title: 'Вийти', html: I.out, onclick: () => { if (confirm('Вийти із застосунку?')) logout(); } })),
     coord ? coordBar() : null);
@@ -463,7 +468,7 @@ function byTime(a, b) { return (mins(a.tFrom) ?? mins(a.tTo) ?? 9999) - (mins(b.
 function tripCard(t, coord, conflict) {
   const badge = badgeOf(t);
   const x = t.status === 'відмінено';
-  const car = (S.data.cars || []).find(c => c.code === t.car);
+  const car = carOf(t);
   const card = h('div', { class: 'card' + (badge ? ' new' : '') + (conflict ? ' conf' : '') + (x ? ' x' : ''), style: '--rail:' + (ST_COL[t.status] || 'var(--st-pr)'), onclick: () => { if (badge) { markSeen(t); card.classList.remove('new'); card.querySelector('.badge')?.remove(); } } });
   const sp = span(t);
   card.append(h('div', { class: 'chead' },
@@ -647,7 +652,7 @@ function homeView(main, list, cf, day) {
   // привітання + справжня анімація авто Посла (якщо завантажена через «МЕД»)
   const show = cars.find(c => c.code === 'ARNd' && hasMedia(c.code, 'gif')) || cars.find(c => hasMedia(c.code, 'gif'));
   const fig = show ? h('figure', { class: 'showcase', style: 'margin:0' }) : null;
-  if (fig) getMedia(show.code, 'gif').then(b => { const im = h('img', { alt: '' }); im.onload = () => { if (im.naturalHeight / im.naturalWidth > .8) im.classList.add('cardcrop'); }; im.src = URL.createObjectURL(b); fig.prepend(h('div', { class: 'frame' }, im)); fig.append(h('figcaption', null, [modelOf(show) || show.car, plateOf(show), show.driver].filter(Boolean).join(', '))); }).catch(() => fig.remove());
+  if (fig) mediaView(show.code).then(im => { fig.prepend(h('div', { class: 'frame' }, im)); fig.append(h('figcaption', null, [modelOf(show) || show.car, plateOf(show), show.driver].filter(Boolean).join(', '))); }).catch(() => fig.remove());
   wrap.append(h('section', { class: 'welcome' },
     h('div', null,
       h('div', { class: 'eyebrow' }, 'Операційний центр'),
@@ -811,12 +816,12 @@ function timeline(main, list, cf, day) {
   fab(main, day);
 }
 function shortPt(p) { return String(p || '—').replace(URL_RE, '').split(/[,(]/)[0].trim().slice(0, 28); }
-function shortName(n) { const p = String(n || '').split(/\s+/); return p.length > 1 ? p[0] + ' ' + p[1][0] + '.' : n; }
+function shortName(n) { const s = String(n || ''); if (/[\/;]/.test(s)) return s.split(/\s*[\/;]\s*/).filter(Boolean).map(shortName).join(' / '); const p = s.split(/\s+/).filter(Boolean); return p.length > 1 ? p[0] + ' ' + p[1][0] + '.' : s; }
 
 // Мініатюра авто у вкладці «Авто»: справжня анімація/фото, якщо завантажені через «МЕД», інакше — намальований силует.
 // Файли великі (до 5 МБ), тому вантажимо лише коли картка з'являється на екрані, і тримаємо в пам'яті сесії.
 function carThumb(c) {
-  const kind = ['jpg', 'png', 'gif'].find(k => hasMedia(c.code, k));
+  const kind = ['mp4', 'jpg', 'png', 'gif'].find(k => hasMedia(c.code, k));
   const el = h('button', { class: 'carthumb', 'aria-label': 'Анімація авто ' + (c.driver || c.code), onclick: () => carGifSheet(c) });
   const draw = () => { const cv = h('canvas', { width: 264, height: 154 }); const g = cv.getContext('2d'); try { drawCar(g, 22, 22, 220, kindOf(c), colorOf(c)); } catch {} el.replaceChildren(cv); };
   if (!kind) {
@@ -825,11 +830,7 @@ function carThumb(c) {
     return el;
   }
   el.classList.add('loading');
-  const go = () => getMedia(c.code, kind).then(b => {
-    const im = h('img', { alt: '' });
-    im.onload = () => { if (im.naturalHeight / im.naturalWidth > 0.8) im.classList.add('cardcrop'); el.classList.remove('loading'); };
-    im.src = URL.createObjectURL(b); el.replaceChildren(im);
-  }).catch(() => { el.classList.remove('loading'); draw(); });
+  const go = () => mediaView(c.code, () => el.classList.remove('loading')).then(m => el.replaceChildren(m)).catch(() => { el.classList.remove('loading'); draw(); });
   if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); go(); } }, { rootMargin: '200px' }); io.observe(el); }
   else go();
   return el;
@@ -967,9 +968,16 @@ function rankCars(d, o, selfUid) {
       const used = hit.reduce((a, x) => a + Math.max(1, Number(x.pax) || 1), 0);
       freeSeats = seats - used; kind = !seats || freeSeats >= pax ? 'pool' : 'busy';
     } else kind = 'busy';
-    return { c, seats, kind, with: hit.sort((a, b) => span(a)[0] - span(b)[0]), freeSeats, dayCount: day.length, leaves };
+    // Авто вільне, але всі його водії в цей час на інших авто (напр. Проценко вже на Caravelle).
+    let drvBusy = null;
+    if (kind === 'free') {
+      const own = c.drivers?.length ? c.drivers : c.driver ? [c.driver] : [];
+      const busyD = own.map(n => d.trips.find(x => x.uid !== selfUid && x.date === o.date && x.status !== 'відмінено' && x.car !== c.code && sameName(tripDriver(x), n) && (() => { const s2 = span(x); return s2 && s2[0] < sp[1] + 15 && sp[0] - 15 < s2[1]; })()));
+      if (own.length && busyD.every(Boolean)) { kind = 'drv'; drvBusy = busyD[0]; }
+    }
+    return { c, seats, kind, with: hit.sort((a, b) => span(a)[0] - span(b)[0]), freeSeats, dayCount: day.length, leaves, drvBusy };
   });
-  const order = { pool: 0, free: 1, small: 2, busy: 3, away: 4 };
+  const order = { pool: 0, free: 1, drv: 2, small: 3, busy: 4, away: 5 };
   list.sort((a, b) => order[a.kind] - order[b.kind] || (a.kind === 'free' ? (a.seats - b.seats) || (a.dayCount - b.dayCount) : 0) || (a.kind === 'pool' ? b.freeSeats - a.freeSeats : 0));
   // Краще підсадити в авто, що вже їде туди ж (мінібус із запасом місць), ніж займати ще одне.
   // Легкові на 3 місця (авто Посла тощо) автоматично не підсаджуємо — лише вручну.
@@ -996,6 +1004,7 @@ function editSheet(t) {
   f.people = h('textarea', { class: 'inp', style: 'min-height:60px' }); f.people.value = t.people || '';
   f.car = h('select', { class: 'inp' }, [['', '— не призначено —'], ...(d.cars || []).map(c => [c.code, c.code + ' · ' + (c.driver || '') + (c.seats ? ' · ' + c.seats + ' м.' : '')])].map(([v, l]) => h('option', { value: v }, l)));
   f.car.value = t.car || '';
+  f.driver = h('select', { class: 'inp' });
   const pick = h('div', { class: 'pick' });
   const body = [dl, dlD,
     h('div', { class: 'grid2' },
@@ -1024,13 +1033,14 @@ function editSheet(t) {
     const head = h('div', { class: 'pick-h' }, h('b', null, 'Авто'),
       r ? h('button', { class: 'chipbtn', type: 'button', onclick: () => { const b = r.best; if (!b) return toast('На цей час немає вільного авто з потрібною кількістю місць'); choose(b); } }, 'Підібрати автоматично') : null);
     pick.append(head);
-    if (!r) { pick.append(h('div', { class: 'pick-hint' }, 'Вкажіть дату і час подачі — покажу, які авто вільні, і запропоную найкраще.')); pick.append(f.car); return; }
+    if (!r) { pick.append(h('div', { class: 'pick-hint' }, 'Вкажіть дату і час подачі — покажу, які авто вільні, і запропоную найкраще.')); pick.append(f.car); drawDriver(o, r); return; }
     const choose = x => { f.car.value = x.c.code; poolNote = x.kind === 'pool' ? 'Спільно з поїздкою ' + fmtT(x.with[0].tFrom) + ' (' + [cleanPt(x.with[0].from), cleanPt(x.with[0].to)].filter(Boolean).join(' → ') + ')' : ''; drawAvail(); };
     r.list.forEach(x => {
       const on = f.car.value === x.c.code;
-      const label = { free: 'Вільне', pool: 'Можна об\'єднати', busy: 'Зайняте', small: 'Мало місць', away: 'Не в Берліні' }[x.kind];
+      const label = { free: 'Вільне', pool: 'Можна об\'єднати', busy: 'Зайняте', small: 'Мало місць', away: 'Не в Берліні', drv: 'Водій зайнятий' }[x.kind];
       const why = x.kind === 'pool' ? 'з поїздкою ' + fmtT(x.with[0].tFrom) + ' ' + [cleanPt(x.with[0].from), cleanPt(x.with[0].to)].filter(Boolean).join(' → ') + ' · вільно ' + x.freeSeats + ' з ' + x.seats
         : x.kind === 'busy' ? fmtT(x.with[0].tFrom) + '–' + hhmm(span(x.with[0])[1]) + ' ' + cleanPt(x.with[0].from)
+        : x.kind === 'drv' ? shortName(tripDriver(x.drvBusy)) + ' о ' + fmtT(x.drvBusy.tFrom) + ' на ' + x.drvBusy.car + ' — можна поставити іншого водія'
         : x.kind === 'away' ? (x.pr.next ? 'прибуде ' + presDT(x.pr.next.from) : x.pr.prev ? 'поїхав ' + presDT(x.pr.prev.to) : 'немає періоду на цю дату')
         : x.kind === 'small' ? seatsW(x.seats) + ', потрібно ' + r.pax
         : (x.dayCount ? x.dayCount + ' поїзд. цього дня' : 'цього дня без поїздок') + (x.seats ? ' · ' + seatsW(x.seats) : '');
@@ -1041,7 +1051,27 @@ function editSheet(t) {
     });
     const other = h('details', { class: 'pick-all' }, h('summary', null, 'Вибрати зі списку'), f.car);
     pick.append(other);
+    drawDriver(o, r);
   };
+  // Водій на цю поїздку: за замовчуванням — водій авто; можна поставити іншого (напр. Решнюк на Caravelle).
+  const drawDriver = (o, r) => {
+    const keep = f.driver.value || t.driver || '';
+    const car = (d.cars || []).find(c => c.code === f.car.value);
+    const sp = span(o);
+    const busyOf = name => !sp ? null : d.trips.find(x => x.uid !== t.uid && x.date === o.date && x.status !== 'відмінено' && sameName(tripDriver(x), name) && (() => { const s2 = span(x); return s2 && s2[0] < sp[1] + 15 && sp[0] - 15 < s2[1]; })());
+    const own = car?.drivers?.length ? car.drivers : car?.driver ? [car.driver] : [];
+    const all = [...own, ...(d.drivers || []).map(x => x.name).filter(n => !own.some(m => sameName(m, n)))];
+    const lab = n => { const b = busyOf(n); return n + (b ? ' · зайнятий ' + fmtT(b.tFrom) + (b.car ? ' (' + b.car + ')' : '') : ''); };
+    f.driver.replaceChildren(h('option', { value: '' }, car ? 'Водій авто: ' + (own.length ? shortName(own[0]) : '—') : '— спершу оберіть авто —'),
+      ...(own.length ? [h('optgroup', { label: 'Водії цього авто' }, ...own.map(n => h('option', { value: n }, lab(n))))] : []),
+      h('optgroup', { label: 'Інші водії' }, ...all.filter(n => !own.some(m => sameName(m, n))).map(n => h('option', { value: n }, lab(n)))));
+    f.driver.value = [...f.driver.options].some(op => op.value === keep) ? keep : '';
+    const cur = f.driver.value || own[0] || '';
+    const b = cur ? busyOf(cur) : null;
+    pick.append(h('label', { class: 'fld pick-drv' }, h('span', null, 'Водій'), f.driver,
+      b ? h('small', { class: 'pick-w' }, shortName(cur) + ' о ' + fmtT(b.tFrom) + ' вже має поїздку' + (b.car ? ' на ' + b.car : '') + '. Перевірте або оберіть іншого.') : null));
+  };
+  f.driver.addEventListener('change', () => drawAvail());
   // Час у дорозі за Google Maps
   const etaBox = h('div', { class: 'eta' });
   let etaTimer;
@@ -1339,7 +1369,16 @@ function atRisk(t) {
   const n = nowMin(); return n >= s0 - 15 && n < s0 + 180;
 }
 function dayLong(iso) { const d = dObj(iso); return DOW[d.getDay()] + ', ' + d.getDate() + ' ' + MON[d.getMonth()]; }
-function carOf(t) { return (S.data.cars || []).find(c => c.code === t.car); }
+// Авто поїздки з урахуванням водія, якого призначили саме на цю поїздку (Проценко/Решнюк можуть мінятися).
+function carOf(t) {
+  const c = (S.data.cars || []).find(c => c.code === t.car);
+  if (!c) return c;
+  if (!t.driver) { if (c.phone || !c.drivers?.length) return c; const dr0 = (S.data.drivers || []).find(x => sameName(x.name, c.drivers[0])); return { ...c, driver: c.drivers.length > 1 ? c.drivers[0] : c.driver, phone: dr0?.phone || '' }; }
+  const dr = (S.data.drivers || []).find(x => sameName(x.name, t.driver));
+  return { ...c, driver: t.driver, phone: dr?.phone || (sameName(c.drivers?.[0], t.driver) ? c.phone : '') };
+}
+function sameName(a, b) { const w = s => String(s || '').toLowerCase().replace(/[’`ʼ]/g, "'").split(/\s+/).filter(Boolean); const x = w(a), y = w(b); if (!x.length || !y.length) return false; if (x[0] === y[0]) return x.length < 2 || y.length < 2 || y.includes(x[1]) || x.includes(y[1]); return x.length > 1 && y.length > 1 && y.includes(x[0]) && x.includes(y[0]); }
+function tripDriver(t) { const c = carOf(t); return t.driver || c?.drivers?.[0] || c?.driver || ''; }
 function transferText(t, o) {
   const car = carOf(t), L = [];
   const s0 = mins(t.tFrom);
@@ -1373,7 +1412,7 @@ function planText(list, car, o) {
   return L.join('\n');
 }
 // ---- картинка-картка поїздки (PNG) ----
-const BRANDS = /\b(ford|transit|bmw|volvo|s60|mercedes|vito|sprinter|volkswagen|volkswage|vw|t6|caravelle|caddy|multivan|man|opel|zafira|movano|vivaro|audi|skoda|toyota|renault|trafic|peugeot|citroen|hyundai|kia)\b/gi;
+const BRANDS = /\b(ford|transit|bmw|volvo|s60|mercedes|vito|sprinter|volkswagen|volkswage|vw|t6|caravelle|caddy|multivan|man|opel|zafira|life|movano|vivaro|audi|skoda|toyota|renault|trafic|peugeot|citroen|hyundai|kia)\b/gi;
 function plateOf(car) {
   const rest = String(car.car || '').replace(BRANDS, ' ').replace(/\s+/g, ' ').trim();
   return (rest.replace(/\D/g, '').length >= 2 && rest.length >= 3) ? rest.toUpperCase() : '';
@@ -1473,10 +1512,40 @@ async function tripImage(t, o) {
 // Справжня анімація авто із закритої папки (якщо є), інакше — намальована модель.
 const _media = {};
 function hasMedia(code, kind) { return !!(S.data?.media?.[code] || []).includes(kind); }
+// Медіа (GIF/MP4 авто) зберігаються на телефоні в Cache Storage і завантажуються з сервера лише після оновлення файлу.
 async function getMedia(code, kind) {
   const k = code + '.' + kind;
-  if (!_media[k]) _media[k] = api('media', { code, kind }).then(r => { const bin = atob(r.b64), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: r.mime }); }).catch(e => { delete _media[k]; throw e; });
+  if (!_media[k]) _media[k] = (async () => {
+    const v = S.data?.mediaVer?.[k] || '0', url = 'https://apu.media/' + encodeURIComponent(k) + '?v=' + encodeURIComponent(v);
+    let cache = null;
+    try { cache = await caches.open('apu-media'); const hit = await cache.match(url); if (hit) return await hit.blob(); } catch {}
+    const r = await api('media', { code, kind });
+    const bin = atob(r.b64), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    const blob = new Blob([a], { type: r.mime });
+    if (cache) try {
+      for (const req of await cache.keys()) if (req.url.startsWith('https://apu.media/' + encodeURIComponent(k) + '?')) await cache.delete(req);
+      await cache.put(url, new Response(blob, { headers: { 'Content-Type': r.mime } }));
+    } catch {}
+    return blob;
+  })().catch(e => { delete _media[k]; throw e; });
   return _media[k];
+}
+// Анімація авто для показу: MP4 (легке, апаратне декодування) замість важкого GIF, якщо є.
+function mediaView(code, onReady) {
+  const kind = ['mp4', 'gif', 'jpg', 'png'].find(k => hasMedia(code, k));
+  if (!kind) return Promise.reject(new Error('Немає медіа'));
+  return getMedia(code, kind).then(b => {
+    const u = URL.createObjectURL(b);
+    if (kind === 'mp4') {
+      const v = h('video', { muted: true, autoplay: true, loop: true, playsinline: true, preload: 'auto', 'aria-hidden': 'true' });
+      v.muted = true; v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
+      v.onloadedmetadata = () => { if (v.videoHeight / v.videoWidth > 0.8) v.classList.add('cardcrop'); onReady?.(v); v.play().catch(() => {}); };
+      v.src = u; return v;
+    }
+    const im = h('img', { alt: '' });
+    im.onload = () => { if (im.naturalHeight / im.naturalWidth > 0.8) im.classList.add('cardcrop'); onReady?.(im); };
+    im.src = u; return im;
+  });
 }
 function carGifFor(car, trip, o = {}) {
   if (hasMedia(car.code, 'gif')) return getMedia(car.code, 'gif');
@@ -1536,16 +1605,36 @@ function mediaSheet(car) {
     [upBtn, input]);
 }
 function carGifSheet(car) {
-  const st = h('div', { class: 'hero-hint', style: 'text-align:left' }, 'Готую 3D-GIF…'); const pv = h('div', { class: 'imgprev', style: 'max-width:360px;margin:0 auto' });
-  let file = null;
-  const share = h('button', { class: 'btn', disabled: true, onclick: async () => { try { await navigator.share({ files: [file] }); } catch (e) { if (e.name !== 'AbortError') toast(e.message); } } }, 'Поділитися…');
-  const dl = h('a', { class: 'btn ghost', href: '#', download: 'avto-' + car.code + '.gif' }, 'Завантажити');
-  sheet('3D-GIF: ' + (car.driver || car.code), [pv, st], [navigator.share ? share : null, dl]);
-  carGifFor(car, null, { phone: true }).then(blob => {
-    file = new File([blob], 'avto-' + String(car.code).replace(/\W/g, '') + '.gif', { type: 'image/gif' });
-    const u = URL.createObjectURL(blob); pv.replaceChildren(h('img', { src: u, alt: 'Авто' })); dl.href = u;
-    st.textContent = Math.round(blob.size / 1024) + ' КБ · можна переслати в WhatsApp'; share.disabled = !navigator.canShare?.({ files: [file] });
-  }).catch(e => { st.textContent = e.message; });
+  // Telegram погано приймає великі GIF через «Поділитися», тому основний варіант — MP4: і Telegram, і WhatsApp показують його як анімацію.
+  const st = h('div', { class: 'hero-hint', style: 'text-align:left' }, 'Готую анімацію…'); const pv = h('div', { class: 'imgprev', style: 'max-width:360px;margin:0 auto' });
+  const base = 'avto-' + String(car.code).replace(/\W/g, '');
+  const files = {};
+  const send = kind => async () => { const f = files[kind]; if (!f) return; try { await navigator.share({ files: [f] }); } catch (e) { if (e.name !== 'AbortError') toast(e.message); } };
+  const bVid = h('button', { class: 'btn', disabled: true, onclick: send('mp4') }, 'Надіслати відео');
+  const bGif = h('button', { class: 'btn ghost', disabled: true, onclick: send('gif') }, 'GIF');
+  const dl = h('a', { class: 'btn ghost', href: '#', download: base + '.gif', style: 'flex:0 0 auto;width:auto;padding:0 14px' }, 'Зберегти');
+  const can = navigator.share && navigator.canShare;
+  sheet('Анімація: ' + (car.driver || car.code), [pv, st], [can ? bVid : null, can ? bGif : null, dl]);
+  const hasMp4 = hasMedia(car.code, 'mp4');
+  const jobs = [];
+  if (hasMp4) jobs.push(getMedia(car.code, 'mp4').then(b => {
+    files.mp4 = new File([b], base + '.mp4', { type: 'video/mp4' });
+    const u = URL.createObjectURL(b);
+    pv.replaceChildren(h('video', { src: u, autoplay: true, loop: true, muted: true, playsinline: true, controls: false, style: 'width:100%;border-radius:12px' }));
+    pv.querySelector('video').muted = true; pv.querySelector('video').play().catch(() => {});
+    if (!dl.dataset.set) { dl.href = u; dl.download = base + '.mp4'; dl.dataset.set = 1; }
+    bVid.disabled = !navigator.canShare?.({ files: [files.mp4] });
+  }));
+  else bVid.style.display = 'none';
+  jobs.push(carGifFor(car, null, { phone: true }).then(blob => {
+    files.gif = new File([blob], base + '.gif', { type: 'image/gif' });
+    if (!hasMp4) { const u = URL.createObjectURL(blob); pv.replaceChildren(h('img', { src: u, alt: 'Авто' })); dl.href = u; }
+    bGif.disabled = !navigator.canShare?.({ files: [files.gif] });
+  }).catch(() => { bGif.style.display = 'none'; }));
+  Promise.allSettled(jobs).then(() => {
+    const kb = k => files[k] ? Math.round(files[k].size / 1024) + ' КБ' : '';
+    st.textContent = hasMp4 ? 'Для Telegram і WhatsApp краще «Надіслати відео» (' + kb('mp4') + '): відкриється як анімація.' + (files.gif ? ' GIF — ' + kb('gif') + '.' : '') : (files.gif ? kb('gif') + ' · можна переслати в WhatsApp' : 'Не вдалося підготувати анімацію');
+  });
 }
 function waHref(text, phone) { return 'https://wa.me/' + (phone ? String(phone).replace(/\D/g, '') : '') + '?text=' + encodeURIComponent(text); }
 
@@ -1630,7 +1719,7 @@ const _render = render;
 render = function () { $('#fab')?.remove(); return _render(); };
 if (S.token) { render(); load(); if (geoOn() && !S.user?.admin) geoStart(); } else renderLogin();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && geoOn() && S.token && !S.user?.admin) { geoStop(false); geoStart(); } });
-setInterval(() => { if (S.token && document.visibilityState === 'visible' && !$('#ov')) load(); }, POLL_MS);
+setInterval(() => { if (S.token && document.visibilityState === 'visible' && !$('#ov')) load(undefined, true); }, POLL_MS);
 document.addEventListener('visibilitychange', () => { if (S.token && document.visibilityState === 'visible' && Date.now() - (S.loadedAt || 0) > 20000) load(); });
 addEventListener('online', () => S.token && load());
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
