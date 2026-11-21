@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=36">
+<link rel="stylesheet" href="style.css?v=37">
 </head>
 <body>
 <div id="app"></div>
@@ -61,6 +61,7 @@ Object.assign(I, {
   list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>',
   pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
   fleet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16.5h16M5 16.5V12l2-4.5h10L19 12v4.5"/><path d="M5 12h14"/><circle cx="8" cy="17.5" r="1.6"/><circle cx="16" cy="17.5" r="1.6"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>',
   user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.2-3.6 4-5.5 7-5.5s5.8 1.9 7 5.5"/></svg>',
   road: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6.5a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7H16"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>',
@@ -173,9 +174,13 @@ async function getEta(origin, dest, date, time) {
 }
 function dur(m) { m = Math.abs(m); return m >= 60 ? Math.floor(m / 60) + ' год ' + (m % 60 ? (m % 60) + ' хв' : '') : m + ' хв'; }
 function tripHash(t) { return [t.date, t.tFrom, t.from, t.tTo, t.to, t.people, t.pax, t.car, t.flight, t.route, t.contact, t.type, t.status === 'відмінено' ? 'x' : ''].join('|'); }
-function toast(msg) {
-  const el = h('div', { class: 'toast' }, msg);
-  document.body.append(el); setTimeout(() => el.remove(), 2600);
+// Підказка внизу; з o.undo — кнопка «Скасувати» (6 с), щоб повернути зроблене одним дотиком.
+function toast(msg, o = {}) {
+  document.querySelectorAll('.toast').forEach(x => x.remove());
+  const el = h('div', { class: 'toast' + (o.undo ? ' has-undo' : ''), role: 'status' }, h('span', null, msg),
+    o.undo ? h('button', { class: 'undo', onclick: () => { el.remove(); o.undo(); } }, 'Скасувати') : null);
+  document.body.append(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 260); }, o.undo ? 6000 : 2600);
 }
 
 // ====== API ======
@@ -189,6 +194,50 @@ async function api(action, payload = {}) {
   if (!j.ok) throw new Error(j.error || 'Помилка');
   return j;
 }
+
+// ====== Черга без зв'язку ======
+// Дії водія (статус, коментар) і переноси в розкладі показуються одразу, а на сервер ідуть у фоні.
+// Без мережі вони чекають у пам'яті телефона й надсилаються, щойно з'явиться зв'язок.
+const OUTBOX = { list: [], busy: false };
+try { OUTBOX.list = JSON.parse(localStorage.getItem('apu.outbox') || '[]'); } catch {}
+const saveOutbox = () => { try { localStorage.setItem('apu.outbox', JSON.stringify(OUTBOX.list)); } catch {} paintOutbox(); };
+const isNet = e => !navigator.onLine || /fetch|network|Load failed|недоступний|NetworkError/i.test(e?.message || '');
+async function send(action, payload) {
+  try { return await api(action, payload); }
+  catch (e) {
+    if (S.ro || !isNet(e)) throw e;
+    OUTBOX.list.push({ action, payload, at: Date.now() }); saveOutbox();
+    return { ok: true, queued: true };
+  }
+}
+async function flushOutbox() {
+  if (OUTBOX.busy || !OUTBOX.list.length || !navigator.onLine || S.ro) return;
+  OUTBOX.busy = true;
+  try {
+    while (OUTBOX.list.length) {
+      const it = OUTBOX.list[0];
+      try { await api(it.action, it.payload); }
+      catch (e) { if (isNet(e)) break; toast('Не вдалося надіслати: ' + e.message); }
+      OUTBOX.list.shift(); saveOutbox();
+    }
+  } finally { OUTBOX.busy = false; paintOutbox(); }
+}
+function applyOutbox(d) {
+  OUTBOX.list.forEach(it => {
+    const t = d.trips.find(x => x.uid === (it.payload.uid || it.payload.trip?.uid)); if (!t) return;
+    if (it.action === 'status') t.status = it.payload.status;
+    if (it.action === 'note') t.note = it.payload.note;
+    if (it.action === 'save') Object.assign(t, it.payload.trip);
+  });
+}
+function paintOutbox() {
+  const el = document.getElementById('obx'); if (!el) return;
+  const n = OUTBOX.list.length;
+  el.hidden = !n;
+  el.textContent = n ? 'Без зв’язку: ' + n + ' ' + (n === 1 ? 'зміна чекає' : 'змін чекають') + ' на надсилання. Надішлю автоматично.' : '';
+}
+const EDIT_KEYS = ['id', 'type', 'date', 'tFrom', 'from', 'tTo', 'to', 'route', 'pax', 'people', 'car', 'status', 'deleg', 'resp', 'note', 'contact', 'flight', 'driver'];
+const snapTrip = t => { const o = { uid: t.uid }; EDIT_KEYS.forEach(k => o[k] = t[k] ?? ''); return o; };
 
 // ====== стан ======
 const S = {
@@ -209,8 +258,10 @@ async function load(range, quiet) {
   S.loading = true; paintBusy();
   let same = false;
   try {
+    await flushOutbox();
     if (S.ro) { const d = await api('asDriver', { login: S.ro.login }); if (!S.ro) return; S.data = d; S.user = d.user; S.loadedAt = Date.now(); S.error = ''; S.offline = false; return; }
     const d = await api('data', range || (S.user?.admin && S.data ? { from: S.data.from, to: S.data.to } : {}));
+    applyOutbox(d);
     if (!range) notifyNew(S.data, d);
     // Фонове оновлення без змін у даних не перебудовує екран (не перезапускає анімації, не смикає прокрутку).
     const sig = JSON.stringify({ ...d, now: 0, track: Array.isArray(d.track) ? d.track.map(x => [x.name, Math.floor((x.t || 0) / 6e5)]) : d.track && Math.floor((d.track.t || 0) / 6e5) });
@@ -326,17 +377,20 @@ function render() {
       h('div', { style: 'flex:1;min-width:0' },
         h('h1', null, coord ? (VIEW_TITLE[S.view] || 'Координація авто') : (S.user?.name || 'Мої поїздки')),
         h('div', { class: 'sub' }, h('span', null, coord ? S.user?.name : carsLine()), h('span', { id: 'upd' }, updated))),
+      coord ? h('button', { class: 'ib kbtn', 'aria-label': 'Пошук', title: 'Пошук (⌘K)', onclick: () => palette() }, h('span', { html: I.search, style: 'display:flex' }), h('kbd', null, IS_MAC ? '⌘K' : 'Ctrl K')) : null,
       h('button', { class: 'ib' + (S.loading ? ' spin' : ''), id: 'refresh', 'aria-label': 'Оновити', title: 'Оновити', html: I.ref, onclick: () => load() }),
       S.ro ? h('button', { class: 'ib', onclick: peekExit }, 'Закрити') : h('button', { class: 'ib out', 'aria-label': 'Вийти', title: 'Вийти', html: I.out, onclick: () => { if (confirm('Вийти із застосунку?')) logout(); } })),
     S.ro ? h('div', { class: 'peekbar' }, h('span', { html: I.info, style: 'display:flex;width:16px;height:16px' }), h('span', null, 'Ви бачите кабінет так, як його бачить водій. Лише перегляд — зміни вимкнено.')) : null,
-    coord ? coordBar() : null);
+    coord ? coordBar() : null,
+    h('div', { class: 'obx', id: 'obx', hidden: true }));
   const shell = h('div', { class: 'shell' }, top);
   if (coord) app.append(sideNav());
   app.append(shell);
   if (S.error) shell.append(h('div', { class: 'banner err' }, S.offline ? 'Немає з\'єднання. Показано дані, збережені ' + (S.loadedAt ? new Date(S.loadedAt).toLocaleString('uk-UA') : '') : S.error));
   const main = h('main');
   shell.append(main);
-  if (!S.data) { main.append(h('div', { class: 'empty' }, h('b', null, 'Завантажую поїздки…'))); return; }
+  queueMicrotask(paintOutbox);
+  if (!S.data) { main.append(h('div', { class: 'skel', 'aria-label': 'Завантажую поїздки' }, ...[0, 1, 2].map(i => h('div', { class: 'skc', style: '--i:' + i }, h('i', { style: 'width:30%' }), h('i', { style: 'width:72%' }), h('i', { style: 'width:55%' }))))); return; }
   if (coord) renderCoord(main); else renderDriver(main);
 }
 
@@ -626,16 +680,39 @@ function tripCard(t, coord, conflict) {
   if (coord) acts.append(h('button', { class: 'act sec2', onclick: e => { e.stopPropagation(); shareSheet([t]); } }, 'Поділитися'));
   if (coord) acts.append(h('button', { class: 'act sec2', onclick: e => { e.stopPropagation(); markSeen(t); editSheet(t); } }, 'Змінити'));
   if (acts.childNodes.length) card.append(acts);
+  if (!coord && !x && !S.ro && nextStep(t)) return swipeable(card, t);
   return card;
 }
+// Свайп вправо по картці водія — наступний крок («Їду», «На місці», …), як у пошті на iPhone.
+function swipeable(card, t) {
+  const st = nextStep(t);
+  const wrap = h('div', { class: 'sw' }, h('div', { class: 'sw-bg', style: '--c:' + (ST_COL[st.to] || 'var(--acc)') }, h('span', null, st.label)), card);
+  let x0 = null, y0 = 0, dx = 0, on = false;
+  card.addEventListener('touchstart', e => { const p = e.touches[0]; x0 = p.clientX; y0 = p.clientY; dx = 0; on = false; card.style.transition = 'none'; }, { passive: true });
+  card.addEventListener('touchmove', e => {
+    if (x0 == null) return; const p = e.touches[0], ddx = p.clientX - x0, ddy = p.clientY - y0;
+    if (!on) { if (Math.abs(ddy) > 10 && Math.abs(ddy) > Math.abs(ddx)) { x0 = null; return; } if (ddx > 12 && ddx > Math.abs(ddy) * 1.4) on = true; else return; }
+    e.preventDefault();
+    dx = Math.max(0, ddx - 12); const r = dx > 110 ? 110 + (dx - 110) * .3 : dx;
+    card.style.transform = 'translateX(' + r + 'px)'; wrap.classList.toggle('arm', dx > 110);
+  }, { passive: false });
+  card.addEventListener('touchend', () => {
+    if (x0 == null) return; x0 = null;
+    card.style.transition = 'transform .45s var(--spring)';
+    if (on && dx > 110) { try { navigator.vibrate?.(15); } catch {} card.style.transform = 'translateX(100%)'; setTimeout(() => setStatus(t, st.to), 220); }
+    else { card.style.transform = ''; wrap.classList.remove('arm'); }
+  });
+  return wrap;
+}
 
-async function setStatus(t, st, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = 'Зберігаю…'; }
-  geoPing(st);
-  try {
-    await api('status', { uid: t.uid, status: st });
-    t.status = st; markSeen(t); ls.set('data', S.data); toast('Статус: ' + st); render();
-  } catch (e) { toast(e.message); if (btn) { btn.disabled = false; btn.textContent = 'Спробувати ще'; } }
+// Статус змінюється на екрані одразу; сервер — у фоні (або з черги, якщо немає зв'язку).
+async function setStatus(t, st, btn, quiet) {
+  const prev = t.status; if (prev === st || S.ro) return S.ro && send('status', {}).catch(() => {});
+  if (!quiet) geoPing(st);
+  t.status = st; markSeen(t); ls.set('data', S.data); render();
+  if (!quiet) toast('Статус: ' + st, { undo: () => setStatus(t, prev, null, true) });
+  try { await send('status', { uid: t.uid, status: st }); }
+  catch (e) { t.status = prev; ls.set('data', S.data); render(); toast(e.message); }
 }
 
 function noteSheet(t) {
@@ -646,9 +723,10 @@ function noteSheet(t) {
   const chips = h('div', { class: 'quick' }, quick.map(q => h('button', { class: 'chipbtn', onclick: () => { ta.value = q + ' (' + stamp() + ')' + (ta.value ? '\n' + ta.value : ''); } }, q)));
   sheet('Коментар до поїздки ' + fmtT(t.tFrom), [chips, ta, h('div', { class: 'hero-hint', style: 'text-align:left' }, 'Коментар одразу бачить координатор.')], [
     h('button', { class: 'btn', onclick: async e => {
-      e.currentTarget.disabled = true;
-      try { await api('note', { uid: t.uid, note: ta.value.trim() }); t.note = ta.value.trim(); closeSheet(); toast('Збережено'); render(); }
-      catch (x) { toast(x.message); e.currentTarget.disabled = false; }
+      if (S.ro) return send('note', {}).catch(() => {});
+      const prev = t.note || '', v = ta.value.trim();
+      const put = async (val, quiet) => { t.note = val; ls.set('data', S.data); render(); try { await send('note', { uid: t.uid, note: val }); } catch (x) { t.note = prev; render(); toast(x.message); } };
+      closeSheet(); toast('Коментар збережено', { undo: () => put(prev, true) }); put(v);
     } }, 'Зберегти')]);
 }
 
@@ -718,7 +796,7 @@ function renderCoord(main) {
   if (S.view === 'cars') return carsView(main, d.trips.filter(t => t.date === day));
   if (S.view === 'map') return mapView(main, d.trips.filter(t => t.date === d.today));
 
-  main.append(h('div', { class: 'tools', style: 'margin-top:10px' }, h('button', { class: 'tool', onclick: () => shareSheet(d.trips.filter(t => t.date === day), { day: true }) }, ico('share'), 'Поділитися розкладом дня')));
+  main.append(h('div', { class: 'tools', style: 'margin-top:10px' }, h('button', { class: 'tool', onclick: () => shareSheet(d.trips.filter(t => t.date === day), { day: true }) }, ico('share'), 'Поділитися розкладом дня'), h('button', { class: 'tool', onclick: () => copyDaySheet(day) }, 'Копіювати день')));
   const q = h('input', { class: 'inp search', type: 'search', placeholder: 'Пошук: прізвище, готель, делегація, авто', value: S.q, oninput: e => { S.q = e.target.value; drawList(); } });
   const box = h('div');
   main.append(q, box);
@@ -831,7 +909,7 @@ function homeView(main, list, cf, day) {
     if (!nowPut && st != null && st > now) { prog.append(h('div', { class: 'nowline', 'aria-hidden': 'true' }, h('b', null, hhmm(now)), h('i'), h('hr'))); nowPut = true; }
     const car = carOf(t);
     const title = String(t.deleg || '').trim() || String(t.people || '').trim() || t.type || 'Поїздка';
-    prog.append(h('div', { class: 'pi' + (past ? ' past' : '') + (ACTIVE.includes(t.status) ? ' live' : ''), style: '--c:' + (ST_COL[t.status] || 'var(--st-pr)'), tabindex: '0', role: 'button', onclick: () => detailSheet(t, cf.has(t.uid)), onkeydown: e => { if (e.key === 'Enter') detailSheet(t, cf.has(t.uid)); } },
+    prog.append(h('div', { class: 'pi' + (past ? ' past' : '') + (ACTIVE.includes(t.status) ? ' live' : ''), style: '--c:' + (ST_COL[t.status] || 'var(--st-pr)'), tabindex: '0', role: 'button', onclick: e => detailSheet(t, cf.has(t.uid), e.currentTarget), onkeydown: e => { if (e.key === 'Enter') detailSheet(t, cf.has(t.uid)); } },
       h('div', { class: 't' }, fmtT(t.tFrom), t.tTo && mins(t.tTo) != null ? h('small', null, 'до ' + fmtT(t.tTo)) : null),
       h('div', { class: 'rail' }, h('i')),
       h('div', { class: 'w' }, h('b', null, title.length > 70 ? title.slice(0, 68) + '…' : title),
@@ -845,7 +923,7 @@ function homeView(main, list, cf, day) {
   const liveBox = h('div', { class: 'live-list' });
   if (active.length) active.slice().sort(byTime).slice(0, 4).forEach(t => {
     const car = carOf(t), tgt = t.status === 'з пасажирами' ? t.to : t.from;
-    liveBox.append(h('div', { class: 'lv', style: '--c:' + ST_COL[t.status], tabindex: '0', role: 'button', onclick: () => detailSheet(t, cf.has(t.uid)) },
+    liveBox.append(h('div', { class: 'lv', style: '--c:' + ST_COL[t.status], tabindex: '0', role: 'button', onclick: e => detailSheet(t, cf.has(t.uid), e.currentTarget) },
       h('span', { class: 'av', html: I.car }),
       h('b', null, car ? shortName(car.driver) : (t.car || 'Без авто')),
       h('span', null, t.status + ': ' + shortPt(tgt)),
@@ -926,7 +1004,7 @@ function timeline(main, list, cf, day) {
   grid.append(hours);
   for (const [code, l] of rows) {
     const car = (d.cars || []).find(c => c.code === code);
-    const lane = h('div', { class: 'tl-lane', style: 'width:' + W + 'px;background-image:repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px ' + 60 * PX + 'px)' });
+    const lane = h('div', { class: 'tl-lane', 'data-code': code, style: 'width:' + W + 'px;background-image:repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px ' + 60 * PX + 'px)' });
     // розкладка по доріжках, щоб блоки не накладались
     const tracks = [];
     l.slice().sort(byTime).forEach(t => {
@@ -934,12 +1012,14 @@ function timeline(main, list, cf, day) {
       let k = tracks.findIndex(end => end <= s[0]); if (k < 0) { k = tracks.length; tracks.push(0); }
       tracks[k] = s[1];
       const left = (s[0] - h0 * 60) * PX, width = Math.max((s[1] - s[0]) * PX - 3, 46);
-      lane.append(h('button', {
+      const blk = h('button', {
         class: 'tl-blk' + (cf.has(t.uid) ? ' cf' : '') + (t.status === 'відмінено' ? ' x' : ''),
         style: `left:${left}px;width:${width}px;top:${7 + k * 52}px;height:46px;--c:${ST_COL[t.status] || 'var(--st-pr)'}`,
-        title: `${fmtT(t.tFrom)} ${t.from} → ${t.to}`,
-        onclick: () => detailSheet(t, cf.has(t.uid))
-      }, h('b', { class: 'num' }, fmtT(t.tFrom) + (badgeOf(t) ? ' •' : '')), shortPt(t.from) + ' → ' + shortPt(t.to)));
+        title: `${fmtT(t.tFrom)} ${t.from} → ${t.to}. Перетягніть, щоб змінити час або авто`,
+        onclick: e => { if (blk._dragged) { blk._dragged = false; return; } detailSheet(t, cf.has(t.uid), e.currentTarget); }
+      }, h('b', { class: 'num' }, fmtT(t.tFrom) + (badgeOf(t) ? ' •' : '')), shortPt(t.from) + ' → ' + shortPt(t.to));
+      if (t.status !== 'завершено' && t.status !== 'відмінено') tlDraggable(blk, t, PX, list);
+      lane.append(blk);
     });
     lane.style.minHeight = (14 + Math.max(1, tracks.length) * 52) + 'px';
     grid.append(h('div', { class: 'tl-row' },
@@ -960,6 +1040,67 @@ function timeline(main, list, cf, day) {
     sc.scrollLeft = Math.max(0, (target - h0 * 60) * PX);
   });
   fab(main, day);
+}
+// Перетягування блоку в «Розкладі»: вліво-вправо — час (крок 5 хв), вгору-вниз — інше авто.
+// Миша — одразу; на телефоні — довге натискання (щоб не заважати прокрутці).
+function tlDraggable(blk, t, PX, dayList) {
+  const sp0 = span(t); if (!sp0 || mins(t.tFrom) == null) return;
+  let st = null;
+  const cleanup = () => { document.querySelectorAll('.tl-lane.drop').forEach(l => l.classList.remove('drop', 'bad')); blk.classList.remove('drag'); blk.style.transform = ''; blk.querySelector('.tl-tip')?.remove(); };
+  const laneAt = (x, y) => document.elementsFromPoint(x, y).find(el => el.classList?.contains('tl-lane'));
+  const move = e => {
+    if (!st) return;
+    const dx = e.clientX - st.x, dy = e.clientY - st.y;
+    if (!st.on) {
+      if (st.touch) { if (Math.hypot(dx, dy) > 8) { clearTimeout(st.timer); st = null; unbind(); } return; }
+      if (Math.hypot(dx, dy) < 5) return;
+      begin();
+    }
+    e.preventDefault();
+    const dm = Math.round(dx / PX / 5) * 5;
+    const lane = laneAt(e.clientX, e.clientY) || st.lane;
+    const code = lane.dataset.code ?? t.car;
+    const ns = [sp0[0] + dm, sp0[1] + dm];
+    const clash = code && dayList.find(x => x !== t && x.car === code && x.status !== 'відмінено' && !sameTrip(x, { ...t, tFrom: hhmm(ns[0]) }) && (() => { const s2 = span(x); return s2 && s2[0] < ns[1] && ns[0] < s2[1]; })());
+    document.querySelectorAll('.tl-lane.drop').forEach(l => l !== lane && l.classList.remove('drop', 'bad'));
+    lane.classList.add('drop'); lane.classList.toggle('bad', !!clash);
+    const oy = lane.getBoundingClientRect().top - st.lane.getBoundingClientRect().top;
+    blk.style.transform = `translate(${dm * PX}px,${oy}px) scale(1.03)`;
+    st.res = { dm, code, clash };
+    st.tip.textContent = hhmm(ns[0]) + (code !== t.car ? ' · ' + (code || 'без авто') : '') + (clash ? ' · накладка з ' + fmtT(clash.tFrom) : '');
+    const sc = blk.closest('.tl-scroll'), r = sc.getBoundingClientRect();
+    if (e.clientX > r.right - 40) sc.scrollLeft += 12; else if (e.clientX < r.left + 140) sc.scrollLeft -= 12;
+  };
+  const begin = () => {
+    st.on = true; blk.classList.add('drag'); st.tip = h('span', { class: 'tl-tip' }); blk.append(st.tip);
+    try { blk.setPointerCapture(st.id); } catch {}
+    if (st.touch) try { navigator.vibrate?.(12); } catch {}
+  };
+  const up = () => {
+    if (!st) return; clearTimeout(st.timer);
+    const r = st.on ? st.res : null; const was = st.on; st = null; cleanup(); unbind();
+    if (!was) return;
+    blk._dragged = true; setTimeout(() => blk._dragged = false, 50);
+    if (!r || (!r.dm && r.code === t.car)) return;
+    const before = snapTrip(t);
+    const nt = { tFrom: hhmm(mins(t.tFrom) + r.dm), tTo: mins(t.tTo) != null ? hhmm(mins(t.tTo) + r.dm) : t.tTo, car: r.code, driver: r.code !== t.car ? '' : t.driver };
+    const apply = async (vals, quiet) => {
+      Object.assign(t, vals); ls.set('data', S.data); render();
+      try { await send('save', { trip: { uid: t.uid, ...vals } }); } catch (x) { Object.assign(t, before); render(); toast(x.message); }
+    };
+    apply(nt);
+    toast('Перенесено: ' + nt.tFrom + (r.code !== before.car ? ' · ' + (r.code || 'без авто') : '') + (r.clash ? ' (є накладка)' : ''), { undo: () => apply({ tFrom: before.tFrom, tTo: before.tTo, car: before.car, driver: before.driver }, true) });
+  };
+  blk.addEventListener('pointerdown', e => {
+    if (S.ro || e.button > 0) return;
+    st = { x: e.clientX, y: e.clientY, id: e.pointerId, touch: e.pointerType !== 'mouse', lane: blk.closest('.tl-lane'), on: false };
+    if (st.touch) st.timer = setTimeout(() => st && begin(), 380);
+    addEventListener('pointermove', move, { passive: false }); addEventListener('pointerup', up); addEventListener('pointercancel', cancel);
+  });
+  const cancel = () => { if (st && !st.on) { clearTimeout(st.timer); st = null; unbind(); } else up(); };
+  const unbind = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', cancel); };
+  blk.addEventListener('touchmove', e => { if (st?.on) e.preventDefault(); }, { passive: false });
+  blk.addEventListener('contextmenu', e => { if (st) e.preventDefault(); });
 }
 function shortPt(p) { return String(p || '—').replace(URL_RE, '').split(/[,(]/)[0].trim().slice(0, 28); }
 function shortName(n) { const s = String(n || ''); if (/[\/;]/.test(s)) return s.split(/\s*[\/;]\s*/).filter(Boolean).map(shortName).join(' / '); const p = s.split(/\s+/).filter(Boolean); return p.length > 1 ? p[0] + ' ' + p[1][0] + '.' : s; }
@@ -1095,9 +1236,64 @@ function carsView(main, list) {
   fab(main, S.day || d.today);
 }
 
-function detailSheet(t, conflict) {
+// Картка «розгортається» у вікно (View Transitions): той самий елемент плавно росте до розміру шторки.
+function detailSheet(t, conflict, src) {
   markSeen(t);
-  sheet('Поїздка о ' + fmtT(t.tFrom), [tripCard(t, true, conflict)], []);
+  const open = () => sheet('Поїздка о ' + fmtT(t.tFrom), [tripCard(t, true, conflict)],
+    S.user?.admin && !S.ro ? [h('button', { class: 'btn ghost', onclick: () => historySheet(t) }, 'Історія змін')] : []);
+  if (!src || !document.startViewTransition || REDUCED.matches) return open();
+  src.style.viewTransitionName = 'trip';
+  document.documentElement.dataset.vt = 'expand';
+  const vt = document.startViewTransition(() => { src.style.viewTransitionName = ''; open(); const ov = $('#ov'); ov.classList.add('novt'); ov.querySelector('.sheet').style.viewTransitionName = 'trip'; });
+  vt.finished.finally(() => { const sh = $('#ov .sheet'); if (sh) sh.style.viewTransitionName = ''; delete document.documentElement.dataset.vt; });
+}
+// Історія змін поїздки (з аркуша «Журнал»).
+async function historySheet(t) {
+  const box = h('div', { class: 'hist' }, ...[0, 1, 2].map(() => h('div', { class: 'hs-sk' })));
+  sheet('Історія: ' + fmtT(t.tFrom) + ' ' + shortPt(t.from), [box], []);
+  try {
+    const r = await api('history', { uid: t.uid });
+    if (!r.list.length) return box.replaceChildren(h('div', { class: 'empty' }, h('b', null, 'Змін ще не було'), 'Тут з’являтимуться всі зміни: хто, коли і що.'));
+    box.replaceChildren(...r.list.map((x, i) => h('div', { class: 'hs', style: '--i:' + i },
+      h('span', { class: 'hs-dot' }), h('div', null, h('b', null, x.what), x.details ? h('div', { class: 'hs-d' }, x.details) : null, h('small', null, x.t + ' · ' + x.who)))));
+  } catch (e) { box.replaceChildren(h('div', { class: 'banner err' }, e.message)); }
+}
+// Шаблони для нової поїздки: найчастіші маршрути + базові (аеропорт ↔ Посольство).
+function templatesRow(d, f) {
+  const cnt = {};
+  d.trips.forEach(t => { const a = cleanPt(t.from), b = cleanPt(t.to); if (!a || !b) return; const k = a + '\u0001' + b; const s = span(t); cnt[k] = cnt[k] || { a, b, n: 0, dur: [] }; cnt[k].n++; if (s && mins(t.tTo) != null) cnt[k].dur.push(s[1] - s[0]); });
+  const base = [{ a: 'Аеропорт BER', b: 'Посольство', dur: [60] }, { a: 'Посольство', b: 'Аеропорт BER', dur: [60] }];
+  const top = Object.values(cnt).sort((x, y) => y.n - x.n).slice(0, 5);
+  const seen = new Set(), list = [...top, ...base].filter(x => { const k = (shortPt(x.a) + '>' + shortPt(x.b)).toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 6);
+  if (!list.length) return null;
+  return h('div', { class: 'tpl' }, h('span', { class: 'tpl-l' }, 'Швидко:'), ...list.map(x => h('button', { type: 'button', class: 'chipbtn', onclick: () => {
+    f.from.value = x.a; f.to.value = x.b;
+    const dm = x.dur.length ? Math.round(x.dur.sort((p, q) => p - q)[x.dur.length >> 1] / 5) * 5 : 0, m0 = mins(f.tFrom.value);
+    if (dm && m0 != null && !f.tTo.value) f.tTo.value = hhmm(m0 + dm);
+    ['from', 'to', 'tTo'].forEach(k => f[k].dispatchEvent(new Event('change', { bubbles: true })));
+  } }, shortPt(x.a) + ' → ' + shortPt(x.b))));
+}
+// Копіювати всі поїздки дня на іншу дату (наприклад, повторний день візиту).
+function copyDaySheet(day) {
+  const src = S.data.trips.filter(t => t.date === day && t.status !== 'відмінено').sort(byTime);
+  if (!src.length) return toast('У цей день немає поїздок для копіювання');
+  const di = h('input', { class: 'inp', type: 'date', value: addDays(day, 1) });
+  const keepCars = h('input', { type: 'checkbox', checked: true });
+  const list = h('div', { class: 'cpl' }, src.map(t => h('div', null, h('b', { class: 'num' }, fmtT(t.tFrom)), ' ' + shortPt(t.from) + ' → ' + shortPt(t.to) + (t.car ? ' · ' + t.car : ''))));
+  sheet('Копіювати ' + dayTitle(day, S.data.today).toLowerCase(), [
+    h('label', { class: 'fld' }, h('span', null, 'На дату'), di),
+    h('label', { class: 'cpchk' }, keepCars, ' Залишити ті самі авто й водіїв'),
+    h('div', { class: 'hero-hint', style: 'text-align:left' }, src.length + ' поїздок. Статуси скинуться на «призначено», коментарі не копіюються.'), list], [
+    h('button', { class: 'btn', onclick: async e => {
+      const to = di.value; if (!to) return toast('Оберіть дату');
+      e.currentTarget.disabled = true;
+      const trips = src.map(t => ({ ...snapTrip(t), uid: '', date: to, status: 'призначено', note: '', car: keepCars.checked ? t.car : '', driver: keepCars.checked ? t.driver : '' }));
+      try {
+        const r = await api('saveMany', { trips }); closeSheet(); S.day = to;
+        toast('Скопійовано ' + trips.length + ' поїздок на ' + dayTitle(to, S.data.today).toLowerCase(), { undo: async () => { await api('saveMany', { trips: r.uids.map(uid => ({ uid, status: 'відмінено' })) }); toast('Копію скасовано'); load(); } });
+        load({ from: addDays(to, -3), to: addDays(to, 14) });
+      } catch (x) { toast(x.message); e.currentTarget.disabled = false; }
+    } }, 'Копіювати')]);
 }
 
 // Підбір авто на час поїздки o. Вільне — без перетину (±15 хв на під'їзд); «об'єднати» — та сама подача
@@ -1427,6 +1623,7 @@ function editSheet(t) {
   f.car.addEventListener('change', drawAvail);
   const toIdx = body.findIndex(x => x && x.contains && x.contains(f.to));
   body.splice(toIdx + 1, 0, etaBox);
+  if (isNew) body.unshift(templatesRow(d, f));
   setTimeout(() => { drawAvail(); drawEta(); }, 0);
   const save = async (btn, extra) => {
     const o = { ...collect(), ...extra };
@@ -1435,11 +1632,18 @@ function editSheet(t) {
     if (pplInput.value.trim()) { addTyped(); Object.assign(o, { people: f.people.value, pax: f.pax.value }); }
     const cap = seatsOf(), over = cap && Number(o.pax) > cap;
     btn.disabled = true;
-    try { await api('save', { trip: o }); closeSheet(); toast((isNew ? 'Поїздку додано' : 'Збережено') + (over ? ' · увага: ' + o.pax + ' осіб на ' + cap + ' місць' : '')); S.day = o.date; await load(); }
+    const before = isNew ? null : snapTrip(t);
+    try {
+      const r = await api('save', { trip: o }); closeSheet(); S.day = o.date;
+      const undo = async () => { try { await api('save', { trip: before || { uid: r.uid, status: 'відмінено' } }); toast(before ? 'Зміни скасовано' : 'Поїздку прибрано (відмінено)'); load(); } catch (x) { toast(x.message); } };
+      toast((o.status === 'відмінено' && !isNew ? 'Поїздку відмінено' : isNew ? 'Поїздку додано' : 'Збережено') + (over ? ' · увага: ' + o.pax + ' осіб на ' + cap + ' місць' : ''), { undo });
+      await load();
+    }
     catch (x) { toast(x.message); btn.disabled = false; }
   };
   const foot = [h('button', { class: 'btn', onclick: e => save(e.currentTarget) }, isNew ? 'Додати' : 'Зберегти')];
   if (!isNew) {
+    foot.unshift(h('button', { class: 'btn ghost', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: () => historySheet(t) }, 'Історія'));
     foot.unshift(h('button', { class: 'btn ghost', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: () => { closeSheet(); editSheet({ ...collect(), uid: '', car: '', status: 'призначено' }); } }, 'Копія'));
     if (t.status !== 'відмінено') foot.unshift(h('button', { class: 'btn danger', style: 'flex:0 0 auto;width:auto;padding:0 14px', onclick: e => { if (confirm('Позначити поїздку як відмінену?')) save(e.currentTarget, { status: 'відмінено' }); } }, 'Відмінити'));
   }
@@ -1507,6 +1711,13 @@ function loadGoogle() {
   return MAP.gp;
 }
 // Однаковий набір дій для двох рушіїв: Google Maps (основний) і Leaflet (запасний).
+// Авто на карті «їде» від старої позиції до нової (1,6 с), а не перестрибує.
+function glide(set, a, b) {
+  if (!a || REDUCED.matches || (a[0] === b[0] && a[1] === b[1]) || distM(a[0], a[1], b[0], b[1]) > 8000) return set(b);
+  const t0 = performance.now(), D = 1600;
+  const f = n => { const k = Math.min(1, (n - t0) / D), e = 1 - Math.pow(1 - k, 3); set([a[0] + (b[0] - a[0]) * e, a[1] + (b[1] - a[1]) * e]); if (k < 1) requestAnimationFrame(f); };
+  requestAnimationFrame(f);
+}
 function googleEngine(box, dark) {
   const g = google.maps;
   const map = new g.Map(box, { center: { lat: 52.515, lng: 13.39 }, zoom: 11, mapId: 'DEMO_MAP_ID', disableDefaultUI: true, zoomControl: true, fullscreenControl: false, clickableIcons: false, gestureHandling: 'greedy', colorScheme: dark ? 'DARK' : 'LIGHT' });
@@ -1514,7 +1725,7 @@ function googleEngine(box, dark) {
   const ll = p => ({ lat: p[0], lng: p[1] });
   return {
     clear() { items.forEach(x => x.setMap ? x.setMap(null) : (x.map = null)); items = []; },
-    car(p, el, onClick, top) { el.style.transform = 'translateY(22px)'; const m = new g.marker.AdvancedMarkerElement({ map, position: ll(p), content: el, zIndex: top ? 1000 : 10, gmpClickable: true }); m.addListener('click', onClick); items.push(m); },
+    car(p, el, onClick, top, from) { el.style.transform = 'translateY(22px)'; const m = new g.marker.AdvancedMarkerElement({ map, position: ll(from || p), content: el, zIndex: top ? 1000 : 10, gmpClickable: true }); m.addListener('click', onClick); items.push(m); glide(q => { if (m.map) m.position = ll(q); }, from, p); },
     dest(p, el) { const m = new g.marker.AdvancedMarkerElement({ map, position: ll(p), content: el, zIndex: 5 }); items.push(m); },
     poi(p, el, onClick) { const m = new g.marker.AdvancedMarkerElement({ map, position: ll(p), content: el, zIndex: 4, gmpClickable: true }); m.addListener('click', onClick); items.push(m); },
     route(pts, color) { const path = pts.map(ll); items.push(new g.Polyline({ map, path, strokeColor: '#ffffff', strokeOpacity: 1, strokeWeight: 9, zIndex: 1 }), new g.Polyline({ map, path, strokeColor: color, strokeOpacity: 1, strokeWeight: 6, zIndex: 2 })); },
@@ -1532,7 +1743,7 @@ function leafletEngine(box, dark) {
   const icon = (el, w, hgt, ax, ay) => L.divIcon({ className: '', html: el.outerHTML, iconSize: [w, hgt], iconAnchor: [ax, ay] });
   return {
     clear() { layer.clearLayers(); },
-    car(p, el, onClick, top) { L.marker(p, { icon: icon(el, 44, 44, 22, 22), zIndexOffset: top ? 1000 : 0 }).on('click', onClick).addTo(layer); },
+    car(p, el, onClick, top, from) { const mk = L.marker(from || p, { icon: icon(el, 44, 44, 22, 22), zIndexOffset: top ? 1000 : 0 }).on('click', onClick).addTo(layer); glide(q => mk.setLatLng(q), from, p); },
     dest(p, el) { L.marker(p, { icon: icon(el, 30, 42, 15, 41), keyboard: false }).addTo(layer); },
     poi(p, el, onClick) { L.marker(p, { icon: L.divIcon({ className: '', html: el.outerHTML, iconSize: [34, 34], iconAnchor: [17, 17] }) }).on('click', onClick).addTo(layer); },
     route(pts, color) { L.polyline(pts, { color: '#fff', weight: 9, opacity: .95, interactive: false }).addTo(layer); L.polyline(pts, { color, weight: 5, interactive: false }).addTo(layer); },
@@ -1668,7 +1879,9 @@ async function mapView(main, todays) {
         if (e.r.end) { E.dest([e.r.end.lat, e.r.end.lng], destEl((cur.status === 'з пасажирами' ? 'Призначення' : 'Подача ' + fmtT(cur.tFrom)) + (ei ? ', буде ' + ei.from + '–' + ei.to : ''))); MAP.pts.push([e.r.end.lat, e.r.end.lng]); }
       }
       const focus = () => { MAP.sel = pid(p); draw(); const b = [[p.lat, p.lng]]; const ee = MAP.eta[k]; if (ee?.r?.poly) b.push(...decodePoly(ee.r.poly)); E.fit(b, 70, 15); if (cur && carTarget(cur)) routeFor(p, cur, false); };
-      E.car([p.lat, p.lng], pinEl('vpin' + (stale ? ' stale' : '') + (MAP.sel === pid(p) ? ' sel' : ''), col, name), focus, MAP.sel === pid(p));
+      MAP.last = MAP.last || {};
+      E.car([p.lat, p.lng], pinEl('vpin' + (stale ? ' stale' : '') + (MAP.sel === pid(p) ? ' sel' : ''), col, name), focus, MAP.sel === pid(p), MAP.last[pid(p)]);
+      MAP.last[pid(p)] = [p.lat, p.lng];
       if (p.acc && p.acc < 1500 && p.acc > 30) E.circle([p.lat, p.lng], p.acc);
       const doing = !cur ? 'Активних поїздок немає' : cur.status === 'на місці' ? 'На місці подачі: ' + cleanPt(cur.from) : cur.status === 'з пасажирами' ? 'Везе до: ' + cleanPt(cur.to) : cur.status === 'в дорозі' ? 'Їде на подачу: ' + cleanPt(cur.from) : 'Далі о ' + fmtT(cur.tFrom) + ': ' + cleanPt(cur.from);
       side.append(h('div', { class: 'gcard' + (MAP.sel === pid(p) ? ' sel' : '') + (stale ? ' stale' : ''), style: '--c:' + col, tabindex: '0', onclick: focus, onkeydown: ev => { if (ev.key === 'Enter') focus(); } },
@@ -2098,6 +2311,69 @@ function sheetDrag(ov) {
   addEventListener('pointermove', move, { passive: true }); addEventListener('pointerup', up); addEventListener('pointercancel', up);
   new MutationObserver((_, o) => { if (!ov.isConnected) { removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); o.disconnect(); } }).observe(document.body, { childList: true });
 }
+
+// ====== Швидкий пошук (⌘K / Ctrl K) ======
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+function palette() {
+  if (!S.data || !S.user?.admin || S.ro || $('.pal-ov')) return;
+  const d = S.data;
+  const inp = h('input', { class: 'pal-in', placeholder: 'Прізвище, готель, авто, час 16:30…', autocomplete: 'off', spellcheck: 'false' });
+  const res = h('div', { class: 'pal-r', role: 'listbox' });
+  let items = [], sel = 0;
+  const close = () => { ov.classList.add('out'); setTimeout(() => ov.remove(), 200); };
+  const go = it => { close(); setTimeout(it.run, 10); };
+  const cmds = [
+    { k: 'cmd', t: 'Нова поїздка', s: 'Додати на ' + dayTitle(S.day || d.today, d.today).toLowerCase(), run: () => editSheet({ date: S.day || d.today, status: 'призначено' }) },
+    ...VIEWS.map(([k, l]) => ({ k: 'cmd', t: 'Перейти: ' + (VIEW_TITLE[k] || l), s: '', run: () => setView(k) })),
+    { k: 'cmd', t: 'Копіювати день', s: dayTitle(S.day || d.today, d.today), run: () => copyDaySheet(S.day || d.today) }
+  ];
+  const draw = () => {
+    const q = inp.value.trim().toLowerCase(), words = q.split(/\s+/).filter(Boolean);
+    const hit = str => words.every(w => str.toLowerCase().includes(w));
+    if (!q) items = cmds.slice(0, 4).concat(d.trips.filter(t => t.date === d.today && t.status !== 'відмінено' && t.status !== 'завершено').sort(byTime).slice(0, 5).map(tripItem));
+    else items = [
+      ...d.trips.filter(t => hit([fmtT(t.tFrom), t.from, t.to, t.people, t.deleg, t.car, tripDriver(t), t.flight, t.resp, dayTitle(t.date, d.today)].join(' '))).sort((a, b) => (a.date === d.today ? -1 : 0) - (b.date === d.today ? -1 : 0) || a.date.localeCompare(b.date) || byTime(a, b)).slice(0, 8).map(tripItem),
+      ...(d.cars || []).filter(c => hit([c.code, c.car, (c.drivers || [c.driver]).join(' ')].join(' '))).slice(0, 4).map(c => ({ k: 'car', t: c.code + ' · ' + (c.car || ''), s: (c.drivers || [c.driver]).filter(Boolean).map(shortName).join(', '), run: () => { S.filter = ''; S.q = c.code; setView('list'); render(); } })),
+      ...(d.drivers || []).filter(x => hit(x.name)).slice(0, 4).map(x => ({ k: 'drv', t: x.name, s: 'Відкрити кабінет водія', run: async () => { const r = PEEK.list || (PEEK.list = (await api('driverList')).list); const u = r.find(y => sameName(y.name, x.name)); u ? peekOpen(u) : toast('У водія немає облікового запису'); } })),
+      ...cmds.filter(c => hit(c.t))];
+    sel = Math.min(sel, Math.max(0, items.length - 1));
+    res.replaceChildren(...(items.length ? items.map((it, i) => h('button', { class: 'pal-i' + (i === sel ? ' on' : ''), role: 'option', onmouseenter: () => { sel = i; paintSel(); }, onclick: () => go(it) },
+      h('span', { class: 'pal-k ' + it.k }, { trip: 'Поїздка', car: 'Авто', drv: 'Водій', cmd: 'Дія' }[it.k]), h('span', { class: 'pal-t' }, h('b', null, it.t), it.s ? h('small', null, it.s) : null))) : [h('div', { class: 'pal-e' }, 'Нічого не знайдено')]));
+  };
+  const tripItem = t => ({ k: 'trip', t: fmtT(t.tFrom) + '  ' + shortPt(t.from) + ' → ' + shortPt(t.to), s: [dayTitle(t.date, d.today), t.car, shortName(tripDriver(t)), t.people && splitPeople(t.people).slice(0, 2).join(', ')].filter(Boolean).join(' · '), run: () => { if (S.day !== t.date) { S.day = t.date; render(); } detailSheet(t, false); } });
+  const paintSel = () => [...res.children].forEach((el, i) => { el.classList.toggle('on', i === sel); if (i === sel) el.scrollIntoView({ block: 'nearest' }); });
+  inp.addEventListener('input', () => { sel = 0; draw(); });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(items.length - 1, sel + 1); paintSel(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(0, sel - 1); paintSel(); }
+    else if (e.key === 'Enter' && items[sel]) go(items[sel]);
+    else if (e.key === 'Escape') close();
+  });
+  const ov = h('div', { class: 'pal-ov', onclick: e => { if (e.target === ov) close(); } },
+    h('div', { class: 'pal', role: 'dialog', 'aria-label': 'Швидкий пошук' }, h('div', { class: 'pal-h' }, h('span', { html: I.search, style: 'display:flex' }), inp, h('kbd', null, 'esc')), res,
+      h('div', { class: 'pal-f' }, h('span', null, '↑↓ вибір'), h('span', null, '↵ відкрити'))));
+  document.body.append(ov); draw(); setTimeout(() => inp.focus(), 20);
+}
+addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('.pal-ov') ? null : palette(); }
+  else if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) && !$('#ov')) { e.preventDefault(); palette(); }
+});
+
+// ====== Потягнути вниз — оновити (телефон) ======
+(() => {
+  let y0 = null, dy = 0; const ind = h('div', { class: 'ptr', 'aria-hidden': 'true' }, h('span', { html: I.ref }));
+  document.body.append(ind);
+  addEventListener('touchstart', e => { y0 = scrollY <= 0 && !$('#ov') && !$('.pal-ov') && S.token && !e.target.closest('.tl-scroll,.tw,#mapbox,.gmap,.sw') ? e.touches[0].clientY : null; dy = 0; }, { passive: true });
+  addEventListener('touchmove', e => {
+    if (y0 == null) return; dy = e.touches[0].clientY - y0; if (dy <= 0 || scrollY > 0) { ind.style.cssText = ''; return; }
+    const r = Math.min(90, dy * .5); ind.style.transform = 'translate(-50%,' + r + 'px) rotate(' + dy * 2 + 'deg)'; ind.style.opacity = Math.min(1, r / 60); ind.classList.toggle('arm', r >= 60);
+  }, { passive: true });
+  addEventListener('touchend', () => {
+    if (y0 == null) return; y0 = null;
+    if (Math.min(90, dy * .5) >= 60) { ind.classList.add('go'); try { navigator.vibrate?.(10); } catch {} load().finally(() => { ind.classList.remove('go', 'arm'); ind.style.cssText = ''; }); }
+    else { ind.classList.remove('arm'); ind.style.cssText = ''; }
+  });
+})();
 
 // ====== старт ======
 const _render = render;
