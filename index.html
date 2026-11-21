@@ -769,58 +769,105 @@ function loadLeaflet() {
   });
 }
 function agoText(ms) { const m = Math.round(ms / 60000); return m < 1 ? 'щойно' : m < 60 ? m + ' хв тому' : Math.floor(m / 60) + ' год ' + (m % 60) + ' хв тому'; }
+// Карта в стилі Google: чиста підкладка CARTO Voyager, маршрут синьою лінією від авто до точки, пін точки з часом прибуття.
+function decodePoly(str) {
+  const out = []; let i = 0, lat = 0, lng = 0;
+  while (i < str.length) {
+    for (const k of [0, 1]) {
+      let b, sh = 0, r = 0;
+      do { b = str.charCodeAt(i++) - 63; r |= (b & 31) << sh; sh += 5; } while (b >= 32 && i < str.length);
+      const d = r & 1 ? ~(r >> 1) : r >> 1;
+      if (k === 0) lat += d; else lng += d;
+    }
+    out.push([lat / 1e5, lng / 1e5]);
+  }
+  return out;
+}
+const esc = x => String(x ?? '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
+const DEST_SVG = '<svg viewBox="0 0 30 42" width="30" height="42"><path d="M15 41C15 41 28 25.5 28 15A13 13 0 0 0 2 15C2 25.5 15 41 15 41Z" fill="#EA4335" stroke="#B3261E" stroke-width="1.5"/><circle cx="15" cy="15" r="5" fill="#7A1C14"/></svg>';
+function carTarget(cur) { return cur ? (cur.status === 'з пасажирами' ? cur.to : cur.status === 'на місці' ? null : cur.from) : null; }
+const pid = p => (p.name || '') + '|' + (p.cars || []).join(',');
 async function mapView(main, todays) {
+  const wrap = h('div', { class: 'gmap' });
   const box = h('div', { id: 'mapbox', class: 'mapbox' });
-  const info = h('div', { class: 'maplist' });
-  main.append(h('div', { class: 'hero-hint', style: 'text-align:left;margin:8px 4px' }, 'Авто з’являються, коли водій увімкнув «Передавати позицію» і застосунок відкритий у нього на екрані. Також позиція фіксується при кожному кроці («Їду», «На місці», «Везу»).'), box, info);
-  try { await loadLeaflet(); } catch (e) { box.textContent = e.message; return; }
-  MAP.map?.remove(); MAP.fitted = false;
-  MAP.map = L.map(box, { zoomControl: true }).setView([52.515, 13.39], 11);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(MAP.map);
+  const side = h('div', { class: 'gside' });
+  const over = h('div', { class: 'gover' });
+  wrap.append(side, h('div', { class: 'gmain' }, box, over));
+  main.append(wrap);
+  try { await loadLeaflet(); } catch (e) { box.replaceChildren(h('div', { class: 'empty' }, h('b', null, 'Карта не завантажилась'), 'Перевірте інтернет і натисніть «Оновити» вгорі.')); return; }
+  MAP.map?.remove(); MAP.fitted = false; MAP.refit = false; MAP.eta = MAP.eta || {};
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  MAP.map = L.map(box, { zoomControl: false, attributionControl: true }).setView([52.515, 13.39], 11);
+  L.control.zoom({ position: 'bottomright' }).addTo(MAP.map);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/' + (dark ? 'dark_all' : 'voyager') + '/{z}/{x}/{y}{r}.png', { maxZoom: 20, subdomains: 'abcd', attribution: '&copy; OpenStreetMap, &copy; CARTO' }).addTo(MAP.map);
   MAP.layer = L.layerGroup().addTo(MAP.map);
-  const draw = () => {
-    MAP.layer.clearLayers(); info.replaceChildren();
-    const now = Date.now(), pts = [];
-    if (!MAP.pos.length) info.append(h('div', { class: 'card', style: 'color:var(--muted)' }, 'Зараз жоден водій не передає позицію.'));
-    MAP.pos.slice().sort((a, b) => b.t - a.t).forEach(p => {
+  const fitAll = () => { const b = []; MAP.layer.eachLayer(l => { if (l.getLatLng) b.push(l.getLatLng()); else if (l.getLatLngs) b.push(...l.getLatLngs()); }); if (b.length) MAP.map.fitBounds(b, { padding: [50, 50], maxZoom: 15 }); };
+  const ctrl = h('button', { class: 'gbtn', onclick: fitAll }, 'Показати всіх');
+
+  // Маршрут і час прибуття: для тих, хто їде, — автоматично, але не частіше ніж раз на 4 хв на авто (ліміт Google).
+  const routeFor = async (p, cur, force) => {
+    const target = carTarget(cur); if (!target) return null;
+    const k = pid(p) + '|' + cur.uid + '|' + cur.status, e = MAP.eta[k];
+    if (e && !force && Date.now() - e.at < 4 * 60000) return e;
+    if (e?.busy) return e;
+    MAP.eta[k] = Object.assign(e || {}, { busy: true });
+    try {
+      const r = await getEta(p.lat.toFixed(3) + ',' + p.lng.toFixed(3), etaQuery(target), '', '');
+      MAP.eta[k] = { at: Date.now(), r, target };
+      if (!MAP.refit && !MAP.sel) { MAP.refit = true; setTimeout(fitAll, 60); }
+    } catch (x) { MAP.eta[k] = { at: Date.now(), err: x.message, target }; }
+    draw(); return MAP.eta[k];
+  };
+  const etaInfo = (cur, e) => {
+    if (!e?.r) return null;
+    const [lo, hi] = etaRange(e.r.trafficSec || e.r.sec), n = nowMin();
+    const plan = cur.status === 'з пасажирами' ? mins(cur.tTo) : mins(cur.tFrom);
+    return { lo, hi, from: hhmm((n + lo) % 1440), to: hhmm((n + hi) % 1440), plan, late: plan != null && n + hi > plan + 2, km: e.r.meters ? (e.r.meters / 1000).toFixed(1) : '' };
+  };
+
+  function draw() {
+    if (!$('#mapbox')) return;
+    MAP.layer.clearLayers(); side.replaceChildren(); over.replaceChildren();
+    const now = Date.now(), list = MAP.pos.slice().sort((a, b) => b.t - a.t);
+    over.append(h('div', { class: 'gpill' }, list.length ? (list.length + ' ' + (list.length === 1 ? 'авто' : 'авто') + ' на карті') : 'Ніхто не передає позицію'), list.length ? ctrl : null);
+    if (!list.length) side.append(h('div', { class: 'gempty' }, h('b', null, 'Зараз жоден водій не передає позицію'), 'Авто з’являться, коли водій увімкне «Передавати позицію» у своєму застосунку. Позиція також фіксується при кожному кроці: «Їду», «На місці», «Везу».'));
+    list.forEach(p => {
       const code = (p.cars || [])[0] || '?';
       const car = (S.data.cars || []).find(c => c.code === code);
-      const trip = todays.filter(t => (p.cars || []).includes(t.car) && t.status !== 'відмінено').sort(byTime);
-      const cur = trip.find(t => ACTIVE.includes(t.status)) || trip.find(t => ['призначено', 'прийнято'].includes(t.status));
-      const stale = now - p.t > 15 * 60000;
+      const trips = todays.filter(t => (p.cars || []).includes(t.car) && t.status !== 'відмінено').sort(byTime);
+      const cur = trips.find(t => ACTIVE.includes(t.status)) || trips.find(t => ['призначено', 'прийнято'].includes(t.status));
+      const stale = now - p.t > 15 * 60000, moving = cur && ['в дорозі', 'з пасажирами'].includes(cur.status);
       const col = cur && ACTIVE.includes(cur.status) ? ST_COL[cur.status] : 'var(--st-pr)';
-      const icon = L.divIcon({ className: '', html: '<div class="pin' + (stale ? ' stale' : '') + '" style="background:' + col + '">' + code.replace(/[<>&"]/g, '') + '</div>', iconSize: [64, 28], iconAnchor: [32, 14] });
-      const pop = h('div', { class: 'pop' }, h('b', null, (p.name || code) + ' · ' + code), h('div', null, (car ? car.car + ', ' + (car.color || '') : '')), h('div', { class: 'muted' }, 'оновлено ' + agoText(now - p.t) + (p.spd ? ' · ' + p.spd + ' км/год' : '') + (p.acc ? ' · ±' + p.acc + ' м' : '')),
-        cur ? h('div', null, cur.status + ': ' + fmtT(cur.tFrom) + ' ' + cleanPt(cur.from) + (cur.to ? ' → ' + cleanPt(cur.to) : '')) : h('div', { class: 'muted' }, 'активних поїздок немає'),
-        h('div', { style: 'display:flex;gap:8px;margin-top:6px' }, car?.phone ? h('a', { href: tel(car.phone) }, 'Подзвонити') : null, h('a', { href: 'https://www.google.com/maps/search/?api=1&query=' + p.lat + ',' + p.lng, target: '_blank', rel: 'noopener' }, 'Google Maps')));
-      // Куди їде і коли буде: рахуємо при відкритті картки водія (щоб не витрачати ліміт Google).
-      const target = cur ? (cur.status === 'з пасажирами' ? cur.to : cur.status === 'на місці' ? null : cur.from) : null;
-      const etaDiv = h('div', { class: 'eta', style: 'margin:4px 0 0' }, cur?.status === 'на місці' ? 'Водій на місці подачі' : target ? 'Рахую час прибуття…' : '');
-      pop.insertBefore(etaDiv, pop.lastChild);
-      const calc = async () => {
-        if (!target) return;
-        try {
-          const r = await getEta(p.lat.toFixed(4) + ',' + p.lng.toFixed(4), etaQuery(target), '', '');
-          const [lo, hi] = etaRange(r.trafficSec || r.sec); const n = nowMin();
-          const plan = cur.status === 'з пасажирами' ? mins(cur.tTo) : mins(cur.tFrom);
-          const late = plan != null && n + hi > plan;
-          etaDiv.replaceChildren(h('div', null, h('b', null, (cur.status === 'з пасажирами' ? 'До призначення' : 'До подачі') + ' ≈ ' + lo + '–' + hi + ' хв')),
-            h('div', null, 'Прибуття ≈ ' + hhmm((n + lo) % 1440) + '–' + hhmm((n + hi) % 1440) + (plan != null ? ' (план ' + hhmm(plan) + ')' : ''), late ? h('b', { style: 'color:var(--red)' }, ' · може запізнитися') : ''),
-            h('div', { class: 'muted' }, cleanPt(target) + (r.meters ? ' · ' + (r.meters / 1000).toFixed(1) + ' км' : '')));
-        } catch (e) { etaDiv.textContent = e.message; }
-      };
-      const mk = L.marker([p.lat, p.lng], { icon }).bindPopup(pop).addTo(MAP.layer);
-      mk.on('popupopen', calc);
-      p._mk = mk;
-      if (p.acc && p.acc < 2000) L.circle([p.lat, p.lng], { radius: p.acc, weight: 1, opacity: .4, fillOpacity: .06 }).addTo(MAP.layer);
-      pts.push([p.lat, p.lng]);
-      info.append(h('div', { class: 'card', style: 'display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px', onclick: () => { MAP.map.setView([p.lat, p.lng], 14); p._mk.openPopup(); } },
-        h('span', { class: 'chip st', style: '--c:' + col }, code), h('div', { style: 'flex:1;min-width:0' }, h('b', null, p.name || code), h('div', { class: 'muted', style: 'font-size:13px' }, agoText(now - p.t) + (cur ? ' · ' + cur.status + ' ' + fmtT(cur.tFrom) + ' → ' + cleanPt(cur.status === 'з пасажирами' ? cur.to : cur.from).slice(0, 34) : ''))),
-        car?.phone ? h('a', { class: 'ib', href: tel(car.phone), html: I.ph, onclick: e => e.stopPropagation() }) : null));
+      const name = shortName(p.name || car?.driver || code);
+      const k = cur ? pid(p) + '|' + cur.uid + '|' + cur.status : '';
+      const e = k ? MAP.eta[k] : null, ei = cur ? etaInfo(cur, e) : null;
+      if (moving && !stale) routeFor(p, cur);
+      // маршрут
+      if (e?.r?.poly && (moving || MAP.sel === pid(p))) {
+        const ll = decodePoly(e.r.poly);
+        L.polyline(ll, { color: '#fff', weight: 9, opacity: .95, interactive: false }).addTo(MAP.layer);
+        L.polyline(ll, { color: ei?.late ? '#D93025' : '#1A73E8', weight: 5, opacity: 1, interactive: false }).addTo(MAP.layer);
+        if (e.r.end) L.marker([e.r.end.lat, e.r.end.lng], { icon: L.divIcon({ className: '', html: '<div class="gdest">' + DEST_SVG + '<span>' + esc((cur.status === 'з пасажирами' ? 'Призначення' : 'Подача ' + fmtT(cur.tFrom)) + (ei ? ', буде ' + ei.from + '–' + ei.to : '')) + '</span></div>', iconSize: [30, 42], iconAnchor: [15, 41] }), keyboard: false }).addTo(MAP.layer);
+      }
+      const html = '<div class="vpin' + (stale ? ' stale' : '') + (MAP.sel === pid(p) ? ' sel' : '') + '" style="--c:' + col + '"><i>' + I.car + '</i><span>' + esc(name) + '</span></div>';
+      const mk = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: '', html, iconSize: [44, 44], iconAnchor: [22, 22] }), title: name, zIndexOffset: MAP.sel === pid(p) ? 1000 : 0 }).addTo(MAP.layer);
+      if (p.acc && p.acc < 1500 && p.acc > 30) L.circle([p.lat, p.lng], { radius: p.acc, weight: 0, fillColor: '#1A73E8', fillOpacity: .1, interactive: false }).addTo(MAP.layer);
+      const focus = () => { MAP.sel = pid(p); draw(); const b = [[p.lat, p.lng]]; const ee = MAP.eta[k]; if (ee?.r?.end) b.push([ee.r.end.lat, ee.r.end.lng]); MAP.map.fitBounds(b, { padding: [70, 70], maxZoom: 15 }); if (cur && carTarget(cur)) routeFor(p, cur); };
+      mk.on('click', focus);
+      // картка в списку
+      const doing = !cur ? 'Активних поїздок немає' : cur.status === 'на місці' ? 'На місці подачі: ' + cleanPt(cur.from) : cur.status === 'з пасажирами' ? 'Везе до: ' + cleanPt(cur.to) : cur.status === 'в дорозі' ? 'Їде на подачу: ' + cleanPt(cur.from) : 'Далі о ' + fmtT(cur.tFrom) + ': ' + cleanPt(cur.from);
+      side.append(h('div', { class: 'gcard' + (MAP.sel === pid(p) ? ' sel' : '') + (stale ? ' stale' : ''), style: '--c:' + col, tabindex: '0', onclick: focus, onkeydown: ev => { if (ev.key === 'Enter') focus(); } },
+        h('div', { class: 'gc-h' }, h('span', { class: 'gc-dot' }), h('b', null, p.name || name), h('span', { class: 'sp' }), h('span', { class: 'muted', style: 'font-size:13px' }, agoText(now - p.t))),
+        h('div', { class: 'gc-l' }, doing),
+        ei ? h('div', { class: 'gc-eta' + (ei.late ? ' late' : '') }, h('b', { class: 'num' }, ei.lo + '–' + ei.hi + ' хв'), ' прибуття ' + ei.from + '–' + ei.to + (ei.plan != null ? ', план ' + hhmm(ei.plan) : '') + (ei.late ? '. Може запізнитися' : '') + (ei.km ? ' (' + ei.km + ' км)' : '')) :
+          e?.err ? h('div', { class: 'gc-l muted' }, e.err) : (cur && carTarget(cur) && !moving ? h('div', { class: 'gc-l muted' }, 'Натисніть, щоб показати маршрут') : null),
+        h('div', { class: 'gc-a' },
+          car?.phone ? h('a', { class: 'tool', href: tel(car.phone), onclick: ev => ev.stopPropagation() }, ico('ph'), 'Подзвонити') : null,
+          h('a', { class: 'tool', href: 'https://www.google.com/maps/search/?api=1&query=' + p.lat + ',' + p.lng, target: '_blank', rel: 'noopener', onclick: ev => ev.stopPropagation() }, 'У Google Maps'))));
     });
-    if (pts.length && !MAP.fitted) { MAP.map.fitBounds(pts, { padding: [40, 40], maxZoom: 14 }); MAP.fitted = true; }
-  };
-  const poll = async () => { try { const r = await api('positions'); MAP.pos = r.positions || []; draw(); } catch (e) { info.replaceChildren(h('div', { class: 'card' }, e.message)); } };
+    if (list.length && !MAP.fitted) { fitAll(); MAP.fitted = true; }
+  }
+  const poll = async () => { try { const r = await api('positions'); MAP.pos = r.positions || []; draw(); } catch (e) { side.replaceChildren(h('div', { class: 'gempty' }, e.message)); } };
   clearInterval(MAP.timer); MAP.timer = setInterval(() => { if (S.view === 'map' && document.visibilityState === 'visible' && $('#mapbox')) poll(); else clearInterval(MAP.timer); }, 20000);
   setTimeout(() => MAP.map.invalidateSize(), 50);
   poll();
