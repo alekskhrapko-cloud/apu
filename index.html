@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=26">
+<link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
 <div id="app"></div>
@@ -429,6 +429,7 @@ function renderDriver(main) {
   const dayRoute = left.length > 1 ? routeHref(left.flatMap(t => [t.from, t.to])) : null;
   main.append(h('div', { class: 'tools' },
     dayRoute ? h('a', { class: 'tool', href: dayRoute, target: '_blank', rel: 'noopener' }, ico('nav'), 'Маршрут на сьогодні (' + left.length + ' поїзд.)') : null,
+    h('button', { class: 'tool', onclick: otSelfOpen }, h('span', { html: I.sig, style: 'display:flex;width:16px;height:16px' }), 'Інструкція OwnTracks'),
     h('button', { class: 'tool', onclick: () => { ls.set('maps', mapsApp() === 'google' ? 'apple' : 'google'); render(); } }, 'Навігація: ' + (mapsApp() === 'google' ? 'Google Maps' : 'Apple Maps')),
     'Notification' in window && Notification.permission === 'default' ? h('button', { class: 'tool', onclick: () => Notification.requestPermission().then(() => render()) }, 'Увімкнути сповіщення') : null));
   const days = [today, addDays(today, 1)];
