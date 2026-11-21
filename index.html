@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=47">
+<link rel="stylesheet" href="style.css?v=48">
 </head>
 <body>
 <div id="app"></div>
@@ -2111,8 +2111,12 @@ async function mapView(main, todays) {
   main.append(wrap);
   const dark = false;
   MAP.E?.remove?.(); MAP.E = null; MAP.fitted = false; MAP.refit = false; MAP.eta = MAP.eta || {};
-  try { if (MAP.gfail) throw new Error('fail'); await loadGoogle(); MAP.E = googleEngine(box, dark); }
+  const wantOsm = (() => { try { return localStorage.getItem('mapEng') === 'osm'; } catch { return false; } })();
+  try { if (MAP.gfail || wantOsm) throw new Error('fail'); await loadGoogle(); MAP.E = googleEngine(box, dark); MAP.eng = 'google'; }
   catch (e) {
+    MAP.eng = 'osm';
+    if (!wantOsm && MAP.wantG) toast('Google Maps зараз не завантажилась — показую OpenStreetMap');
+    MAP.wantG = false;
     try { await loadLeaflet(); MAP.E = leafletEngine(box, dark); }
     catch (e2) { box.replaceChildren(h('div', { class: 'empty' }, h('b', null, 'Карта не завантажилась'), 'Перевірте інтернет і натисніть «Оновити» вгорі.')); return; }
   }
@@ -2120,6 +2124,15 @@ async function mapView(main, todays) {
   MAP.pts = [];
   const fitAll = () => E.fit(MAP.pts, 60, 15);
   const ctrl = h('button', { class: 'gbtn', onclick: () => { MAP.sel = null; draw(); fitAll(); } }, 'Показати всіх');
+  // Перемикач карти: Google ⇄ OpenStreetMap. Вибір запам'ятовується на цьому пристрої.
+  const engSw = h('div', { class: 'gseg', role: 'radiogroup', 'aria-label': 'Карта' },
+    ...[['google', 'Google'], ['osm', 'OSM']].map(([k, t]) => h('button', { role: 'radio', 'aria-checked': String(MAP.eng === k), class: MAP.eng === k ? 'on' : '', title: k === 'google' ? 'Карта Google' : 'Карта OpenStreetMap', onclick: () => {
+      if (MAP.eng === k) { try { localStorage.setItem('mapEng', k); } catch {} return; }
+      if (k === 'google' && MAP.gfail) return toast('Google Maps зараз недоступна');
+      try { localStorage.setItem('mapEng', k); } catch {}
+      MAP.wantG = k === 'google';
+      main.replaceChildren(); mapView(main, todays);
+    } }, t)));
 
   // Маршрут і час прибуття: для тих, хто їде, — автоматично, але не частіше ніж раз на 4 хв на авто (ліміт Google).
   const routeFor = async (p, cur, force) => {
@@ -2159,7 +2172,7 @@ async function mapView(main, todays) {
     MAP.focusPlace = focusPlace;
     PLACES.forEach(pl => E.poi([pl.lat, pl.lng], placeEl(pl, MAP.poiSel === pl.id), () => focusPlace(pl)));
     const now = Date.now(), list = MAP.pos.slice().sort((a, b) => b.t - a.t);
-    over.append(h('div', { class: 'gpill' }, list.length ? list.length + ' авто на карті' : 'Ніхто не передає позицію')); if (list.length) over.append(ctrl);
+    over.append(h('div', { class: 'gpill' }, list.length ? list.length + ' авто на карті' : 'Ніхто не передає позицію')); if (list.length) over.append(ctrl); over.append(engSw);
     if (!list.length) side.append(h('div', { class: 'gempty' }, h('b', null, 'Зараз жоден водій не передає позицію'), 'Авто з’являться, коли водій увімкне «Передавати позицію» у своєму застосунку. Позиція також фіксується при кожному кроці: «Їду», «На місці», «Везу».'));
     list.forEach(p => {
       const code = (p.cars || [])[0] || '?';
