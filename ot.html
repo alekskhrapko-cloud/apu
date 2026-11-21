@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <title>Авто ПУ: фонова позиція</title>
-<link rel="stylesheet" href="style.css?v=27">
+<link rel="stylesheet" href="style.css?v=28">
 <style>
   .ot{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 28px) 20px 40px}
   .ot h1{font:600 34px/1.1 var(--serif);color:var(--ink);margin:0 0 8px}
@@ -17,6 +17,11 @@
   .step p{margin:0;color:var(--muted);font-size:15px}
   .step .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
   .step .row a{flex:1 1 140px}
+  .man{margin-top:12px;background:var(--line2);border-radius:12px;padding:10px 14px}
+  .man summary{cursor:pointer;font-weight:600;font-size:15px}
+  .man ol{margin:10px 0;padding-left:20px;color:var(--body);font-size:15px;line-height:1.5}
+  .man code{display:block;word-break:break-all;font-size:12px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;margin:8px 0}
+  .chk{margin-top:10px!important;font-size:13.5px!important}
   .bad{background:var(--red-soft);color:var(--red);border-radius:12px;padding:14px}
 </style>
 </head>
@@ -42,6 +47,8 @@ if (!d || !d.c) {
 } else {
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const inline = 'owntracks:///config?inline=' + encodeURIComponent(d.c);
+  const srvUrl = API + '?u=' + encodeURIComponent(d.u) + '&ot=' + d.t;
+  const byUrl = 'owntracks:///config?url=' + encodeURIComponent(API + '?otcfg=1&u=' + encodeURIComponent(d.u) + '&ot=' + d.t + '&d=' + encodeURIComponent(d.d || 'PU'));
   box.innerHTML = `
     <div class="crest" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="16" cy="16" r="8.5"/><ellipse cx="16" cy="16" rx="3.6" ry="8.5"/><path d="M7.5 16h17M9 11.5h14M9 20.5h14"/></svg></div>
     <h1>${esc(d.n)}, налаштуймо фонову позицію</h1>
@@ -52,7 +59,18 @@ if (!d || !d.c) {
         <a class="btn ${ios ? 'ghost' : ''}" href="https://play.google.com/store/apps/details?id=org.owntracks.android">Google Play</a>
       </div></section>
     <section class="step"><b class="n">2</b><h2>Підключіть до Авто ПУ</h2><p>Натисніть кнопку: OwnTracks відкриється і запитає, чи імпортувати налаштування. Погодьтеся.</p>
-      <div class="row"><a class="btn" href="${inline}">Налаштувати OwnTracks</a></div></section>
+      <div class="row"><a class="btn" href="${inline}">Налаштувати OwnTracks</a><a class="btn ghost" href="${byUrl}">Спосіб 2</a></div>
+      <details class="man"><summary>Не спрацювало? Налаштувати вручну</summary>
+        <ol>
+          <li>В OwnTracks натисніть <b>i</b> (угорі зліва) → <b>Settings</b>.</li>
+          <li><b>Mode</b>: оберіть <b>HTTP</b>.</li>
+          <li><b>URL</b>: вставте адресу нижче (кнопка «Скопіювати»).</li>
+          <li>Поверніться на карту → кнопка зі стрілкою вгору → <b>Send location now</b>.</li>
+        </ol>
+        <code id="srv">${esc(srvUrl)}</code>
+        <button class="btn ghost" type="button" id="cp">Скопіювати адресу</button>
+      </details>
+      <p class="chk">Перевірка: у OwnTracks → <b>i</b> у рядку Parameters має бути адреса <i>https://script.google.com/…</i>, а не <i>mqtts://user@host</i>.</p></section>
     <section class="step"><b class="n">3</b><h2>Дозвольте позицію «Завжди»</h2><p>${ios
       ? 'iPhone: Параметри → OwnTracks → Геолокація → «Завжди», і ввімкніть «Точна геолокація».'
       : 'Android: дозвольте доступ до місцезнаходження «Завжди» і вимкніть економію заряду для OwnTracks.'}</p></section>
@@ -62,6 +80,11 @@ if (!d || !d.c) {
     <section class="step"><b class="n">5</b><h2>Перевірте</h2><p>Поверніться в «Авто ПУ»: за хвилину-дві картка «Фонова позиція» стане зеленою — «передається». Якщо вона жовта, ще раз перевірте крок 3 і режим «Move».</p>
       <div class="row"><a class="btn ghost" href="./">Повернутися в Авто ПУ</a></div></section>`;
 }
+document.getElementById('cp')?.addEventListener('click', async e => {
+  const t = document.getElementById('srv').textContent;
+  try { await navigator.clipboard.writeText(t); } catch { const r = document.createRange(); r.selectNodeContents(document.getElementById('srv')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand('copy'); }
+  e.target.textContent = 'Скопійовано';
+});
 </script>
 </body>
 </html>
