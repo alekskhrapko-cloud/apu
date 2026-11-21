@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=33">
+<link rel="stylesheet" href="style.css?v=34">
 </head>
 <body>
 <div id="app"></div>
@@ -1214,8 +1214,9 @@ function editSheet(t) {
   };
   const syncPeople = () => {
     f.people.value = ppl.list.join(', ');
-    if (!paxTouched) f.pax.value = ppl.list.length ? String(ppl.list.length) : '';
-    peopleBox.replaceChildren(...ppl.list.map(n => h('span', { class: 'ppl-c' }, n, h('button', { type: 'button', 'aria-label': 'Прибрати ' + n, onclick: () => { ppl.list = ppl.list.filter(x => x !== n); syncPeople(); } }, '×'))), pplInput);
+    if (ppl.list.length) { f.pax.value = String(ppl.list.length); paxTouched = false; } else if (!paxTouched) f.pax.value = '';
+    const capP = seatsOf();
+    peopleBox.replaceChildren(...ppl.list.map((n, i) => h('span', { class: 'ppl-c' + (capP ? (i < capP ? ' fit' : ' over') : ''), title: capP ? (i < capP ? 'є місце' : 'немає місця в авто') : '' }, n, h('button', { type: 'button', 'aria-label': 'Прибрати ' + n, onclick: () => { ppl.list = ppl.list.filter(x => x !== n); syncPeople(); } }, '×'))), pplInput);
     pplInput.placeholder = ppl.list.length ? 'Додати ще…' : 'Прізвище — Enter, або оберіть нижче';
     const kp = knownPeople(d.trips, f.deleg.value.trim());
     pplDl.replaceChildren(...kp.all.filter(n => !ppl.list.includes(n)).slice(0, 300).map(n => h('option', { value: n })));
@@ -1230,7 +1231,8 @@ function editSheet(t) {
   pplInput.addEventListener('blur', () => { if (pplInput.value.trim()) addTyped(); });
   peopleBox.addEventListener('click', e => { if (e.target === peopleBox) pplInput.focus(); });
   f.pax.addEventListener('input', () => { paxTouched = f.pax.value.trim() !== '' && Number(f.pax.value) !== ppl.list.length; drawPax(); });
-  f.car.addEventListener('change', drawPax);
+  f.car.addEventListener('change', () => { drawPax(); syncPeopleColors(); });
+  const syncPeopleColors = () => { const cap = seatsOf(); [...peopleBox.querySelectorAll('.ppl-c')].forEach((el, i) => { el.classList.toggle('fit', !!cap && i < cap); el.classList.toggle('over', !!cap && i >= cap); }); };
   f.deleg.addEventListener('change', syncPeople);
   // --- контакти: з телефонної книги (де підтримується) ---
   if ('contacts' in navigator && 'select' in navigator.contacts) ['resp', 'contact'].forEach(k => {
@@ -1246,7 +1248,7 @@ function editSheet(t) {
       r ? h('button', { class: 'chipbtn', type: 'button', onclick: () => { const b = r.best; if (!b) return toast('На цей час немає вільного авто з потрібною кількістю місць'); choose(b); } }, 'Підібрати автоматично') : null);
     pick.append(head);
     if (!r) { pick.append(h('div', { class: 'pick-hint' }, 'Вкажіть дату і час подачі — покажу, які авто вільні, і запропоную найкраще.')); pick.append(f.car); drawDriver(o, r); return; }
-    const choose = x => { f.car.value = x.c.code; poolNote = x.kind === 'pool' ? 'Спільно з поїздкою ' + fmtT(x.with[0].tFrom) + ' (' + [cleanPt(x.with[0].from), cleanPt(x.with[0].to)].filter(Boolean).join(' → ') + ')' : ''; drawAvail(); };
+    const choose = x => { f.car.value = x.c.code; poolNote = x.kind === 'pool' ? 'Спільно з поїздкою ' + fmtT(x.with[0].tFrom) + ' (' + [cleanPt(x.with[0].from), cleanPt(x.with[0].to)].filter(Boolean).join(' → ') + ')' : ''; f.car.dispatchEvent(new Event('change')); };
     r.list.forEach(x => {
       const on = f.car.value === x.c.code;
       const label = { free: 'Вільне', pool: 'Можна об\'єднати', busy: 'Зайняте', small: 'Мало місць', away: 'Не в Берліні', drv: 'Водій зайнятий' }[x.kind];
@@ -1434,29 +1436,60 @@ function leafletEngine(box, dark) {
 // Постійні точки на карті: база і урядовий термінал. Гайд «як заїхати» — кроки з фото (фото додаються в медіа як PLACE-<id>-<n>).
 const PLACES = [
   { id: 'emb', name: 'Посольство України', short: 'Посольство', sub: 'Точка базування, Albrechtstraße 26, 10117 Berlin', lat: 52.52389, lng: 13.38361, icon: 'crest' },
-  { id: 'gov', name: 'Урядовий термінал BER', short: 'Урядовий термінал', sub: 'Regierungsflughafen, Willy-Brandt-Str. 1, 12529 Schönefeld. Місце зустрічі делегацій', lat: 52.38152452516927, lng: 13.50829855376269, icon: 'plane', guide: [] },
+  { id: 'gov', name: 'Урядовий термінал BER', short: 'Урядовий термінал', sub: 'Regierungsflughafen, Willy-Brandt-Str. 1, 12529 Schönefeld. Місце зустрічі делегацій', lat: 52.38152452516927, lng: 13.50829855376269, icon: 'plane', guide: [
+    { title: 'Огляд авто і формування кортежу', text: 'Колишня територія виставки ILA, Selchow (Schönefeld): майданчик на схід від павільйону Halle C (виділено червоним на схемі). Огляд — за часом із програми (зазвичай о 06:00). Ножі, мультитули, газові балончики тощо не брати — залишити в Посольстві.', lat: 52.3524375, lng: 13.479171875, zoom: 17, media: 'GOV1' },
+    { title: 'Паркінг: чекати тут', text: 'Майданчик-«квадрат» поруч з урядовим терміналом, де авто стоять, поки делегація в терміналі.', lat: 52.38202755852296, lng: 13.507701345193405, zoom: 19 },
+    { title: 'Висадка й посадка пасажирів', text: 'Під’їзд до урядового терміналу — висаджувати пасажирів тут, до шлагбаума. Далі без окремого дозволу не заїжджати.', lat: 52.38153926641489, lng: 13.508337424710087, zoom: 19 }
+  ] },
+  { id: 'govpark', name: 'Урядовий термінал: паркінг', short: 'Паркінг УТ', sub: 'Тут авто чекають, поки делегація в терміналі', lat: 52.38202755852296, lng: 13.507701345193405, icon: 'park', minor: true },
+  { id: 'govdrop', name: 'Урядовий термінал: висадка (до шлагбаума)', short: 'Висадка УТ', sub: 'Під’їзд до урядового терміналу, висаджувати пасажирів до шлагбаума', lat: 52.38153926641489, lng: 13.508337424710087, icon: 'drop', minor: true },
+  { id: 'ila', name: 'Огляд і формування кортежу (ILA, Selchow)', short: 'Огляд / кортеж', sub: 'Колишня територія ILA, майданчик на схід від Halle C', lat: 52.3524375, lng: 13.479171875, icon: 'shield', minor: true },
   { id: 'ber', name: 'BER, паркінг для звичайних рейсів', short: 'BER, паркінг', sub: 'Біля Steigenberger Airport Hotel. Коли зустріч не через урядовий термінал', lat: 52.36414666616245, lng: 13.512407449469531, icon: 'park' }
 ];
 const PLACE_SVG = {
   crest: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z" fill="currentColor"/></svg>',
   plane: '<svg viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" fill="currentColor"/></svg>',
-  park: '<svg viewBox="0 0 24 24"><path d="M7 3h6.5a5.5 5.5 0 0 1 0 11H11v7H7V3zm4 4v3h2.5a1.5 1.5 0 0 0 0-3H11z" fill="currentColor"/></svg>'
+  park: '<svg viewBox="0 0 24 24"><path d="M7 3h6.5a5.5 5.5 0 0 1 0 11H11v7H7V3zm4 4v3h2.5a1.5 1.5 0 0 0 0-3H11z" fill="currentColor"/></svg>',
+  drop: '<svg viewBox="0 0 24 24"><path d="M12 2a6 6 0 0 1 6 6c0 4.5-6 12-6 12S6 12.5 6 8a6 6 0 0 1 6-6zm0 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM5 21h14v1.5H5z" fill="currentColor"/></svg>',
+  shield: '<svg viewBox="0 0 24 24"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3zm-1.2 13.6L17 9.4l-1.4-1.4-4.8 4.8-2.4-2.4L7 11.8l3.8 3.8z" fill="currentColor"/></svg>'
 };
-function placeEl(pl) { return h('div', { class: 'gpoi poi-' + pl.id, html: '<i>' + PLACE_SVG[pl.icon] + '</i><span>' + esc(pl.short) + '</span>' }); }
+function placeEl(pl) { return h('div', { class: 'gpoi poi-' + pl.id + (pl.minor ? ' minor' : ''), html: '<i>' + PLACE_SVG[pl.icon] + '</i><span>' + esc(pl.short) + '</span>' }); }
 function placeSheet(pl) {
   const nav = 'https://www.google.com/maps/dir/?api=1&destination=' + pl.lat + ',' + pl.lng + '&travelmode=driving';
   const body = [h('div', { class: 'muted', style: 'margin-bottom:12px' }, pl.sub)];
+  const minis = [];
   if (pl.guide) {
     body.push(h('h3', { class: 'gd-t' }, 'Як заїхати'));
     if (!pl.guide.length) body.push(h('div', { class: 'gd-empty' }, 'Покроковий гайд із фото (пункт перевірки, в’їзд, де стати) з’явиться тут.'));
     pl.guide.forEach((g, i) => {
       const img = h('div', { class: 'gd-img' });
-      body.push(h('div', { class: 'gd-step' }, h('div', { class: 'gd-n' }, String(i + 1)), h('div', null, h('b', null, g.title), g.text ? h('p', null, g.text) : null, g.lat ? h('a', { class: 'tool', href: 'https://www.google.com/maps/dir/?api=1&destination=' + g.lat + ',' + g.lng + '&travelmode=driving', target: '_blank', rel: 'noopener' }, 'Маршрут сюди') : null, img)));
+      const mini = g.lat ? h('div', { class: 'gd-map' }) : null;
+      if (mini) minis.push([mini, g]);
+      body.push(h('div', { class: 'gd-step' }, h('div', { class: 'gd-n' }, String(i + 1)), h('div', null, h('b', null, g.title), g.text ? h('p', null, g.text) : null, img, mini,
+        g.lat ? h('div', { class: 'gd-a' }, h('a', { class: 'tool', href: 'https://www.google.com/maps/dir/?api=1&destination=' + g.lat + ',' + g.lng + '&travelmode=driving', target: '_blank', rel: 'noopener' }, 'Маршрут сюди'),
+          h('a', { class: 'tool', href: 'https://www.google.com/maps/@?api=1&map_action=map&center=' + g.lat + ',' + g.lng + '&zoom=19&basemap=satellite', target: '_blank', rel: 'noopener' }, 'Супутник у Google Maps')) : null)));
       const mk = g.media && ['jpg', 'png'].find(k => hasMedia(g.media, k));
       if (mk) getMedia(g.media, mk).then(b => img.append(h('img', { src: URL.createObjectURL(b), alt: g.title }))).catch(() => {});
     });
   }
   sheet(pl.name, body, [h('a', { class: 'btn', href: nav, target: '_blank', rel: 'noopener' }, 'Маршрут у Google Maps')]);
+  if (minis.length) miniMaps(minis);
+}
+// Супутникові міні-карти для кроків гайду (як «скриншот», але живі: можна наблизити).
+async function miniMaps(list) {
+  let gm = false; try { if (!MAP.gfail) { await loadGoogle(); gm = true; } } catch {}
+  if (!gm) { try { await loadLeaflet(); } catch { list.forEach(([el]) => el.remove()); return; } }
+  list.forEach(([el, g]) => {
+    const z = g.zoom || 18;
+    if (gm) {
+      const map = new google.maps.Map(el, { center: { lat: g.lat, lng: g.lng }, zoom: z, mapTypeId: 'satellite', mapId: 'DEMO_MAP_ID', disableDefaultUI: true, zoomControl: true, gestureHandling: 'cooperative', tilt: 0 });
+      new google.maps.marker.AdvancedMarkerElement({ map, position: { lat: g.lat, lng: g.lng } });
+    } else {
+      const m = L.map(el, { zoomControl: true, attributionControl: true }).setView([g.lat, g.lng], Math.min(z, 18));
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri' }).addTo(m);
+      L.circleMarker([g.lat, g.lng], { radius: 9, color: '#fff', weight: 3, fillColor: '#A63A32', fillOpacity: 1 }).addTo(m);
+    }
+  });
 }
 const pid = p => (p.name || '') + '|' + (p.cars || []).join(',');
 async function mapView(main, todays) {

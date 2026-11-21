@@ -568,3 +568,11 @@ a.btn{display:flex;align-items:center;justify-content:center;text-decoration:non
 .tw-f{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
 .tw-man{border:0;background:transparent;color:var(--acc);font:inherit;font-size:13px;text-decoration:underline;cursor:pointer;padding:0}
 .grid2 > .tw-host:nth-child(2) .tw{left:auto;right:0}
+.ppl-c.fit{background:var(--ok-soft);color:var(--ok)}
+.ppl-c.over{background:var(--red-soft);color:var(--red);box-shadow:inset 0 0 0 1px rgba(166,58,50,.35)}
+.gd-map{height:220px;border-radius:12px;overflow:hidden;margin-top:8px;background:#E8E4DE}
+.gd-a{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.gpoi.minor{font-size:11.5px;padding:2px 8px 2px 2px}
+.gpoi.minor i{width:20px;height:20px}.gpoi.minor i svg{width:12px;height:12px}
+.gpoi.poi-govpark i,.gpoi.poi-govdrop i{background:#1F3A5F}
+.gpoi.poi-ila i{background:#5B4636}
