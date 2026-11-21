@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=46">
+<link rel="stylesheet" href="style.css?v=47">
 </head>
 <body>
 <div id="app"></div>
@@ -398,7 +398,8 @@ function sideNav() {
     h('hr'),
     h('nav', { class: 'snav' }, SHOW_OT ? h('button', { onclick: otSheet }, h('span', { html: I.sig, style: 'display:flex' }), 'Фоновий трекінг') : null,
       h('button', { onclick: () => shareSheet((d?.trips || []).filter(t => t.date === (S.day || today)), { day: true }) }, h('span', { html: I.share, style: 'display:flex' }), 'Розклад для WhatsApp'),
-      callToggle()),
+      callToggle(),
+      h('button', { onclick: hotkeysSheet, title: 'Гарячі клавіші (?)' }, h('span', { class: 'hk-ico' }, '⌘'), 'Гарячі клавіші')),
     h('div', { class: 'sp' }),
     h('div', { class: 'me' }, h('i', null, initials(S.user?.name)), h('div', null, h('b', null, S.user?.name || ''), h('span', null, 'Координатор')),
       h('button', { 'aria-label': 'Вийти', title: 'Вийти', html: I.out, onclick: () => { if (confirm('Вийти із застосунку?')) logout(); } })));
@@ -3006,6 +3007,12 @@ function radioDrag(bar) {
   addEventListener('resize', apply);
   requestAnimationFrame(apply);
 }
+// Довгі назви станцій («# Aktuelle HITS - 24H NON-STOP … LIVE DJ SET») скорочуємо до перших слів.
+function radioName(n) {
+  let s = String(n || '').replace(/^[#\s*•|~\-_.]+/, '').trim();
+  s = s.split(/\s+[-–—|@•]\s+|\s*[|@•]\s*/)[0] || s;
+  const w = s.split(/\s+/); return w.length > 4 ? w.slice(0, 4).join(' ') + '…' : s;
+}
 function radioCat() {
   const c = RADIO.cat; if (!c) return;
   const im = catImg('rb-cat-img');
@@ -3026,7 +3033,7 @@ function paintRadioBar() {
   bar.replaceChildren(
     RADIO.cat,
     h('button', { class: 'rb-p', 'aria-label': on ? 'Пауза' : 'Грати', html: on ? I.pause : I.play, onclick: radioToggle }),
-    h('div', { class: 'rb-t' }, h('b', null, RADIO.cur.name), h('small', null, RADIO.err || (wait ? 'підключаюсь…' : on ? 'в ефірі' : 'на паузі'))),
+    h('div', { class: 'rb-t' }, h('b', { title: RADIO.cur.name }, radioName(RADIO.cur.name)), h('small', null, RADIO.err || (wait ? 'підключаюсь…' : on ? 'в ефірі' : 'на паузі'))),
     on ? h('span', { class: 'rb-eq', 'aria-hidden': 'true' }, h('i'), h('i'), h('i'), h('i')) : null,
     h('input', { type: 'range', min: '0', max: '1', step: '0.05', value: String(RADIO.audio?.volume ?? ls.get('radioVol', .8)), 'aria-label': 'Гучність', oninput: e => { if (RADIO.audio) RADIO.audio.volume = +e.target.value; ls.set('radioVol', +e.target.value); } }),
     h('button', { class: 'rb-x', 'aria-label': 'Вимкнути радіо', onclick: () => { document.body.classList.remove('has-radio'); RADIO.audio?.pause(); RADIO.audio && (RADIO.audio.src = ''); RADIO.audio = null; RADIO.cat = null; $('#rbar')?.remove(); } }, '×'));
@@ -3038,7 +3045,7 @@ function radioView(main) {
   main.append(h('p', { class: 'lead-n' }, 'Для настрою в офісі чи в дорозі. Радіо грає далі, поки ви працюєте в інших розділах.'), tabs, search, grid);
   const card = (st, i) => h('button', { class: 'rcard' + (RADIO.cur?.url === st.url_resolved ? ' cur' : ''), style: '--i:' + i, onclick: e => { radioPlay(st); grid.querySelectorAll('.rcard').forEach(c => c.classList.remove('cur')); e.currentTarget.classList.add('cur'); } },
     h('span', { class: 'rc-logo' }, st.favicon ? h('img', { src: st.favicon, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: e => e.target.replaceWith(h('b', null, (st.label || st.name || '?').trim()[0])) }) : h('b', null, (st.label || st.name || '?').trim()[0])),
-    h('span', { class: 'rc-t' }, h('b', null, st.label || st.name), h('small', null, [st.countrycode, (st.tags || '').split(',').slice(0, 2).join(', ')].filter(Boolean).join(' · '))));
+    h('span', { class: 'rc-t' }, h('b', { title: st.name }, st.label || radioName(st.name)), h('small', null, [st.countrycode, (st.tags || '').split(',').slice(0, 2).join(', ')].filter(Boolean).join(' · '))));
   const sk = () => grid.replaceChildren(...Array.from({ length: 8 }, () => h('div', { class: 'rcard sk' })));
   let seq = 0;
   const draw = async () => {
@@ -3105,7 +3112,39 @@ addEventListener('keydown', e => {
   if (e.key === 'Escape' && $('#ov') && !$('.tw:not(.out)') && !$('.pal-ov')) { e.preventDefault(); closeSheet(); return; }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('.pal-ov') ? null : palette(); }
   else if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) && !$('#ov')) { e.preventDefault(); palette(); }
+  else hotkey(e);
 });
+// ====== Гарячі клавіші (однакові на Mac і Windows) ======
+// Прості літери/цифри працюють, коли курсор не в полі вводу і не відкрите вікно.
+const HOTKEYS = [
+  ['1 … 9', 'Розділи меню по черзі (Огляд, Розклад, Поїздки, Карта…)'],
+  ['N', 'Нова поїздка'], ['V', 'Поїздка з повідомлення колеги'], [(IS_MAC ? '⌘' : 'Ctrl') + ' K  або  /', 'Швидкий пошук'],
+  ['← / →', 'Попередній / наступний день'], ['T', 'Сьогодні'], ['R', 'Оновити дані'],
+  ['M', 'Радіо: грати / пауза'], ['Esc', 'Закрити вікно'], ['?', 'Ця підказка']
+];
+function hotkeysSheet() {
+  sheet('Гарячі клавіші', [h('div', { class: 'hk' }, ...HOTKEYS.map(([k, d]) => h('div', { class: 'hk-r' }, h('span', null, ...k.split(/(\s+або\s+|\s*\/\s*|\s*…\s*)/).map(p => /^\s*(або|\/|…)\s*$/.test(p) ? h('i', null, p.trim()) : h('kbd', null, p.trim())).filter(x => x.textContent)), h('b', null, d)))),
+    h('p', { class: 'lead-n', style: 'margin:12px 0 0' }, 'Клавіші працюють, коли курсор не стоїть у полі вводу. На Mac і Windows однаково, лише ⌘ на Mac = Ctrl на Windows.')], []);
+}
+function hotkey(e) {
+  if (e.metaKey || e.ctrlKey || e.altKey || !S.token || S.ro) return;
+  if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
+  if ($('#ov') || $('.pal-ov')) return;
+  const coord = !!S.user?.admin, k = e.key, c = e.code;
+  const go = fn => { e.preventDefault(); fn(); };
+  // e.code — фізична клавіша, тож працює і на українській, і на англійській розкладці.
+  if (k === '?' || (c === 'Slash' && e.shiftKey)) return go(hotkeysSheet);
+  if (c === 'KeyR') return go(() => { load(); toast('Оновлюю…'); });
+  if (c === 'KeyM' && RADIO.cur) return go(radioToggle);
+  if (!coord) return;
+  const dg = /^Digit([1-9])$/.exec(c) || /^Numpad([1-9])$/.exec(c);
+  if (dg && VIEWS[+dg[1] - 1]) return go(() => setView(VIEWS[+dg[1] - 1][0]));
+  if (c === 'KeyN') return go(() => editSheet({ date: S.day || S.data?.today, status: 'призначено' }));
+  if (c === 'KeyV') return go(() => pasteSheet());
+  if (c === 'KeyT') return go(() => goDay(S.data?.today));
+  if (k === 'ArrowLeft' && S.data && !['map', 'radio', 'drivers'].includes(S.view)) return go(() => goDay(addDays(S.day || S.data.today, -1)));
+  if (k === 'ArrowRight' && S.data && !['map', 'radio', 'drivers'].includes(S.view)) return go(() => goDay(addDays(S.day || S.data.today, 1)));
+}
 
 // ====== Потягнути вниз — оновити (телефон) ======
 (() => {
