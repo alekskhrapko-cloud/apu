@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=23">
 </head>
 <body>
 <div id="app"></div>
@@ -125,6 +125,8 @@ function resolvePoint(point) {
   if (!p) return null;
   const u = URL_RE.exec(p); if (u) return { url: u[0], q: p.replace(URL_RE, '').trim() };
   const low = p.toLowerCase();
+  const pl = typeof PLACES !== 'undefined' && PLACES.find(x => low === x.name.toLowerCase() || low === x.short.toLowerCase());
+  if (pl) return { url: 'https://www.google.com/maps/search/?api=1&query=' + pl.lat + ',' + pl.lng, q: pl.lat + ',' + pl.lng };
   const a = (S.data?.addresses || []).find(x => low === x.name.toLowerCase() || low.startsWith(x.name.toLowerCase()));
   if (a) return URL_RE.test(a.nav) ? { url: URL_RE.exec(a.nav)[0], q: p } : { q: a.nav };
   return { q: /berlin|schönefeld|ber\b|\d{5}/i.test(p) ? p : p + ', Berlin' };
@@ -156,7 +158,7 @@ function nowMin() { const n = new Date(); return n.getHours() * 60 + n.getMinute
 // Текст для запиту маршруту в Google: адреса з довідника, а для коротких посилань — зрозуміла назва.
 function etaQuery(point) {
   const r = resolvePoint(point); if (!r) return '';
-  if (!r.url) return r.q;
+  if (!r.url || /^-?\d+\.\d+,-?\d+\.\d+$/.test(r.q)) return r.q;
   const p = cleanPt(point);
   if (/урядов|ber|аеропорт|аэропорт|flughafen/i.test(p)) return 'Flughafen Berlin Brandenburg, Schönefeld';
   return p + ', Berlin';
@@ -863,6 +865,36 @@ function detailSheet(t, conflict) {
   sheet('Поїздка о ' + fmtT(t.tFrom), [tripCard(t, true, conflict)], []);
 }
 
+// Підбір авто на час поїздки o. Вільне — без перетину (±15 хв на під'їзд); «об'єднати» — та сама подача
+// або те саме призначення з різницею до 20 хв і вистачає місць; рекомендація — вільне з найменшим запасом місць і навантаженням.
+function seatsW(n) { n = Number(n); const m = n % 10, c = n % 100; return n + ' ' + (m === 1 && c !== 11 ? 'місце' : m >= 2 && m <= 4 && (c < 12 || c > 14) ? 'місця' : 'місць'); }
+function samePt(a, b) { a = cleanPt(a).toLowerCase(); b = cleanPt(b).toLowerCase(); return !!a && a === b; }
+function rankCars(d, o, selfUid) {
+  const sp = span(o); if (!o.date || !sp) return null;
+  const pax = Math.max(1, Number(o.pax) || 1);
+  const list = (d.cars || []).map(c => {
+    const seats = Number(c.seats) || 0;
+    const day = d.trips.filter(x => x.car === c.code && x.date === o.date && x.uid !== selfUid && x.status !== 'відмінено');
+    const hit = day.map(x => [x, span(x)]).filter(([, s2]) => s2 && s2[0] < sp[1] + 15 && sp[0] - 15 < s2[1]).map(([x]) => x);
+    const poolable = x => { const s2 = span(x); return s2 && Math.abs(s2[0] - sp[0]) <= 20 && (samePt(x.from, o.from) || samePt(x.to, o.to)); };
+    let kind, freeSeats = seats;
+    if (!hit.length) kind = seats && seats < pax ? 'small' : 'free';
+    else if (hit.every(poolable)) {
+      const used = hit.reduce((a, x) => a + Math.max(1, Number(x.pax) || 1), 0);
+      freeSeats = seats - used; kind = !seats || freeSeats >= pax ? 'pool' : 'busy';
+    } else kind = 'busy';
+    return { c, seats, kind, with: hit.sort((a, b) => span(a)[0] - span(b)[0]), freeSeats, dayCount: day.length };
+  });
+  const order = { pool: 0, free: 1, small: 2, busy: 3 };
+  list.sort((a, b) => order[a.kind] - order[b.kind] || (a.kind === 'free' ? (a.seats - b.seats) || (a.dayCount - b.dayCount) : 0) || (a.kind === 'pool' ? b.freeSeats - a.freeSeats : 0));
+  // Краще підсадити в авто, що вже їде туди ж (мінібус із запасом місць), ніж займати ще одне.
+  // Легкові на 3 місця (авто Посла тощо) автоматично не підсаджуємо — лише вручну.
+  const pool = list.find(x => x.kind === 'pool' && x.seats > 3), free = list.find(x => x.kind === 'free');
+  const best = pool || free || null;
+  if (best) list.splice(list.indexOf(best), 1), list.unshift(best);
+  return { list, best, pax };
+}
+
 function editSheet(t) {
   const d = S.data, isNew = !t.uid;
   const f = {};
@@ -872,23 +904,26 @@ function editSheet(t) {
     f[k].value = t[k] || opts[0][0];
     return h('label', { class: 'fld' }, h('span', null, label), f[k]);
   };
-  const points = [...new Set(d.trips.flatMap(x => [x.from, x.to]).filter(Boolean))].slice(0, 300);
+  const points = [...new Set([...PLACES.map(x => x.name), ...d.trips.flatMap(x => [x.from, x.to]).filter(Boolean)])].slice(0, 300);
   const dl = h('datalist', { id: 'pts' }, points.map(p => h('option', { value: p })));
   const dlD = h('datalist', { id: 'dels' }, (d.delegations || []).map(p => h('option', { value: p })));
   f.note = h('textarea', { class: 'inp' }); f.note.value = t.note || '';
   f.route = h('textarea', { class: 'inp', style: 'min-height:60px' }); f.route.value = t.route || '';
   f.people = h('textarea', { class: 'inp', style: 'min-height:60px' }); f.people.value = t.people || '';
+  f.car = h('select', { class: 'inp' }, [['', '— не призначено —'], ...(d.cars || []).map(c => [c.code, c.code + ' · ' + (c.driver || '') + (c.seats ? ' · ' + c.seats + ' м.' : '')])].map(([v, l]) => h('option', { value: v }, l)));
+  f.car.value = t.car || '';
+  const pick = h('div', { class: 'pick' });
   const body = [dl, dlD,
     h('div', { class: 'grid2' },
       inp('date', 'Дата', { type: 'date' }),
-      sel('type', 'Тип', [['', '—'], ...(d.types || []).map(x => [x, x])])),
+      inp('tFrom', 'Час подачі', { placeholder: '08:30', inputmode: 'numeric' })),
     h('div', { class: 'grid2' },
-      inp('tFrom', 'Час подачі', { placeholder: '08:30', inputmode: 'numeric' }),
-      inp('tTo', 'Час прибуття', { placeholder: '09:15', inputmode: 'numeric' })),
+      inp('tTo', 'Час прибуття', { placeholder: '09:15', inputmode: 'numeric' }),
+      inp('pax', 'Осіб', { inputmode: 'numeric', placeholder: '1' })),
     inp('from', 'Точка подачі', { list: 'pts', placeholder: 'ПУ, готель, аеропорт…' }),
     inp('to', 'Точка призначення', { list: 'pts' }),
-    sel('car', 'Авто', [['', '— не призначено —'], ...(d.cars || []).map(c => [c.code, c.code + ' · ' + (c.driver || '') + (c.seats ? ' · ' + c.seats + ' м.' : '')])]),
-    h('div', { class: 'grid2' }, inp('pax', 'Осіб', { inputmode: 'numeric' }), inp('flight', 'Рейс', { placeholder: 'LO389, 11:25' })),
+    pick,
+    h('div', { class: 'grid2' }, sel('type', 'Тип', [['', '—'], ...(d.types || []).map(x => [x, x])]), inp('flight', 'Рейс', { placeholder: 'LO389, 11:25' })),
     h('label', { class: 'fld' }, h('span', null, 'Склад (прізвища)'), f.people),
     inp('deleg', 'Делегація', { list: 'dels' }),
     h('div', { class: 'grid2' }, inp('resp', 'Відповідальний'), inp('contact', 'Контакт на місці (тел.)', { type: 'tel' })),
@@ -897,17 +932,30 @@ function editSheet(t) {
     sel('status', 'Статус', (d.statuses || []).map(x => [x, x]))];
   if (t.car && !(d.cars || []).some(c => c.code === t.car)) f.car.append(h('option', { value: t.car }, t.car)), (f.car.value = t.car);
   const collect = () => { const o = { uid: t.uid }; for (const [k, el] of Object.entries(f)) o[k] = el.value.trim(); return o; };
-  // Хто вільний на цей час
-  const avail = h('div', { class: 'quick', style: 'margin-top:-6px' });
+  // Підбір авто: хто вільний на цей час, кого можна об'єднати, що рекомендувати
+  let poolNote = '';
   const drawAvail = () => {
-    const o = collect(); const sp0 = span(o);
-    avail.replaceChildren();
-    if (!o.date || !sp0) return;
-    (d.cars || []).forEach(c => {
-      const busy = d.trips.filter(x => x.car === c.code && x.date === o.date && x.uid !== t.uid && x.status !== 'відмінено').map(x => [x, span(x)]).filter(([x, s2]) => s2 && s2[0] < sp0[1] && sp0[0] < s2[1] && !sameTrip(x, o));
-      avail.append(h('button', { class: 'chipbtn ' + (busy.length ? 'busy' : 'free') + (f.car.value === c.code ? ' sel' : ''), title: busy.map(([x]) => fmtT(x.tFrom) + ' ' + cleanPt(x.from) + ' → ' + cleanPt(x.to)).join('\n'),
-        onclick: () => { f.car.value = c.code; drawAvail(); } }, c.code + (busy.length ? ' · зайнятий ' + fmtT(busy[0][0].tFrom) : ' · вільний')));
+    const o = collect(); const r = rankCars(d, o, t.uid);
+    pick.replaceChildren();
+    const head = h('div', { class: 'pick-h' }, h('b', null, 'Авто'),
+      r ? h('button', { class: 'chipbtn', type: 'button', onclick: () => { const b = r.best; if (!b) return toast('На цей час немає вільного авто з потрібною кількістю місць'); choose(b); } }, 'Підібрати автоматично') : null);
+    pick.append(head);
+    if (!r) { pick.append(h('div', { class: 'pick-hint' }, 'Вкажіть дату і час подачі — покажу, які авто вільні, і запропоную найкраще.')); pick.append(f.car); return; }
+    const choose = x => { f.car.value = x.c.code; poolNote = x.kind === 'pool' ? 'Спільно з поїздкою ' + fmtT(x.with[0].tFrom) + ' (' + [cleanPt(x.with[0].from), cleanPt(x.with[0].to)].filter(Boolean).join(' → ') + ')' : ''; drawAvail(); };
+    r.list.forEach(x => {
+      const on = f.car.value === x.c.code;
+      const label = { free: 'Вільне', pool: 'Можна об\'єднати', busy: 'Зайняте', small: 'Мало місць' }[x.kind];
+      const why = x.kind === 'pool' ? 'з поїздкою ' + fmtT(x.with[0].tFrom) + ' ' + [cleanPt(x.with[0].from), cleanPt(x.with[0].to)].filter(Boolean).join(' → ') + ' · вільно ' + x.freeSeats + ' з ' + x.seats
+        : x.kind === 'busy' ? fmtT(x.with[0].tFrom) + '–' + hhmm(span(x.with[0])[1]) + ' ' + cleanPt(x.with[0].from)
+        : x.kind === 'small' ? seatsW(x.seats) + ', потрібно ' + r.pax
+        : (x.dayCount ? x.dayCount + ' поїзд. цього дня' : 'цього дня без поїздок') + (x.seats ? ' · ' + seatsW(x.seats) : '');
+      pick.append(h('button', { type: 'button', class: 'pick-i k-' + x.kind + (on ? ' sel' : ''), onclick: () => choose(x) },
+        h('span', { class: 'pick-c' }, x.c.code, r.best === x ? h('em', null, 'рекомендую') : null),
+        h('span', { class: 'pick-m' }, [x.c.car, x.c.color, x.c.driver].filter(Boolean).join(' · ')),
+        h('span', { class: 'pick-s' }, h('b', null, label), ' ', why)));
     });
+    const other = h('details', { class: 'pick-all' }, h('summary', null, 'Вибрати зі списку'), f.car);
+    pick.append(other);
   };
   // Час у дорозі за Google Maps
   const etaBox = h('div', { class: 'eta' });
@@ -931,15 +979,14 @@ function editSheet(t) {
     }, 600);
   };
   ['date', 'tFrom', 'tTo', 'from', 'to'].forEach(k => f[k].addEventListener('change', () => { drawAvail(); drawEta(); }));
-  ['tFrom', 'tTo'].forEach(k => f[k].addEventListener('input', drawAvail));
+  ['tFrom', 'tTo', 'pax'].forEach(k => f[k].addEventListener('input', drawAvail));
   f.car.addEventListener('change', drawAvail);
-  const carIdx = body.findIndex(x => x && x.contains && x.contains(f.car));
-  body.splice(carIdx + 1, 0, avail);
   const toIdx = body.findIndex(x => x && x.contains && x.contains(f.to));
   body.splice(toIdx + 1, 0, etaBox);
   setTimeout(() => { drawAvail(); drawEta(); }, 0);
   const save = async (btn, extra) => {
     const o = { ...collect(), ...extra };
+    if (poolNote && o.car && !o.note.includes('Спільно з')) o.note = [o.note, poolNote].filter(Boolean).join('\n');
     if (!o.date || !(o.from || o.to)) return toast('Вкажіть дату і хоча б одну точку');
     btn.disabled = true;
     try { await api('save', { trip: o }); closeSheet(); toast(isNew ? 'Поїздку додано' : 'Збережено'); S.day = o.date; await load(); }
@@ -1023,6 +1070,7 @@ function googleEngine(box, dark) {
     clear() { items.forEach(x => x.setMap ? x.setMap(null) : (x.map = null)); items = []; },
     car(p, el, onClick, top) { el.style.transform = 'translateY(22px)'; const m = new g.marker.AdvancedMarkerElement({ map, position: ll(p), content: el, zIndex: top ? 1000 : 10, gmpClickable: true }); m.addListener('click', onClick); items.push(m); },
     dest(p, el) { const m = new g.marker.AdvancedMarkerElement({ map, position: ll(p), content: el, zIndex: 5 }); items.push(m); },
+    poi(p, el, onClick) { const m = new g.marker.AdvancedMarkerElement({ map, position: ll(p), content: el, zIndex: 4, gmpClickable: true }); m.addListener('click', onClick); items.push(m); },
     route(pts, color) { const path = pts.map(ll); items.push(new g.Polyline({ map, path, strokeColor: '#ffffff', strokeOpacity: 1, strokeWeight: 9, zIndex: 1 }), new g.Polyline({ map, path, strokeColor: color, strokeOpacity: 1, strokeWeight: 6, zIndex: 2 })); },
     circle(p, r) { items.push(new g.Circle({ map, center: ll(p), radius: r, strokeWeight: 0, fillColor: '#1A73E8', fillOpacity: .12, clickable: false })); },
     fit(pts, pad, maxZoom) { if (!pts.length) return; if (pts.length === 1) { map.setCenter(ll(pts[0])); map.setZoom(Math.min(maxZoom, 15)); return; } const b = new g.LatLngBounds(); pts.forEach(p => b.extend(ll(p))); map.fitBounds(b, pad); g.event.addListenerOnce(map, 'idle', () => { if (map.getZoom() > maxZoom) map.setZoom(maxZoom); }); },
@@ -1040,11 +1088,39 @@ function leafletEngine(box, dark) {
     clear() { layer.clearLayers(); },
     car(p, el, onClick, top) { L.marker(p, { icon: icon(el, 44, 44, 22, 22), zIndexOffset: top ? 1000 : 0 }).on('click', onClick).addTo(layer); },
     dest(p, el) { L.marker(p, { icon: icon(el, 30, 42, 15, 41), keyboard: false }).addTo(layer); },
+    poi(p, el, onClick) { L.marker(p, { icon: L.divIcon({ className: '', html: el.outerHTML, iconSize: [34, 34], iconAnchor: [17, 17] }) }).on('click', onClick).addTo(layer); },
     route(pts, color) { L.polyline(pts, { color: '#fff', weight: 9, opacity: .95, interactive: false }).addTo(layer); L.polyline(pts, { color, weight: 5, interactive: false }).addTo(layer); },
     circle(p, r) { L.circle(p, { radius: r, weight: 0, fillColor: '#1A73E8', fillOpacity: .1, interactive: false }).addTo(layer); },
     fit(pts, pad, maxZoom) { if (pts.length) map.fitBounds(pts, { padding: [pad, pad], maxZoom }); },
     resize() { map.invalidateSize(); }, remove() { map.remove(); }
   };
+}
+// Постійні точки на карті: база і урядовий термінал. Гайд «як заїхати» — кроки з фото (фото додаються в медіа як PLACE-<id>-<n>).
+const PLACES = [
+  { id: 'emb', name: 'Посольство України', short: 'Посольство', sub: 'Точка базування, Albrechtstraße 26, 10117 Berlin', lat: 52.52389, lng: 13.38361, icon: 'crest' },
+  { id: 'gov', name: 'Урядовий термінал BER', short: 'Урядовий термінал', sub: 'Regierungsflughafen, Willy-Brandt-Str. 1, 12529 Schönefeld. Місце зустрічі делегацій', lat: 52.38152452516927, lng: 13.50829855376269, icon: 'plane', guide: [] },
+  { id: 'ber', name: 'BER, паркінг для звичайних рейсів', short: 'BER, паркінг', sub: 'Біля Steigenberger Airport Hotel. Коли зустріч не через урядовий термінал', lat: 52.36414666616245, lng: 13.512407449469531, icon: 'park' }
+];
+const PLACE_SVG = {
+  crest: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z" fill="currentColor"/></svg>',
+  plane: '<svg viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" fill="currentColor"/></svg>',
+  park: '<svg viewBox="0 0 24 24"><path d="M7 3h6.5a5.5 5.5 0 0 1 0 11H11v7H7V3zm4 4v3h2.5a1.5 1.5 0 0 0 0-3H11z" fill="currentColor"/></svg>'
+};
+function placeEl(pl) { return h('div', { class: 'gpoi poi-' + pl.id, html: '<i>' + PLACE_SVG[pl.icon] + '</i><span>' + esc(pl.short) + '</span>' }); }
+function placeSheet(pl) {
+  const nav = 'https://www.google.com/maps/dir/?api=1&destination=' + pl.lat + ',' + pl.lng + '&travelmode=driving';
+  const body = [h('div', { class: 'muted', style: 'margin-bottom:12px' }, pl.sub)];
+  if (pl.guide) {
+    body.push(h('h3', { class: 'gd-t' }, 'Як заїхати'));
+    if (!pl.guide.length) body.push(h('div', { class: 'gd-empty' }, 'Покроковий гайд із фото (пункт перевірки, в’їзд, де стати) з’явиться тут.'));
+    pl.guide.forEach((g, i) => {
+      const img = h('div', { class: 'gd-img' });
+      body.push(h('div', { class: 'gd-step' }, h('div', { class: 'gd-n' }, String(i + 1)), h('div', null, h('b', null, g.title), g.text ? h('p', null, g.text) : null, g.lat ? h('a', { class: 'tool', href: 'https://www.google.com/maps/dir/?api=1&destination=' + g.lat + ',' + g.lng + '&travelmode=driving', target: '_blank', rel: 'noopener' }, 'Маршрут сюди') : null, img)));
+      const mk = g.media && ['jpg', 'png'].find(k => hasMedia(g.media, k));
+      if (mk) getMedia(g.media, mk).then(b => img.append(h('img', { src: URL.createObjectURL(b), alt: g.title }))).catch(() => {});
+    });
+  }
+  sheet(pl.name, body, [h('a', { class: 'btn', href: nav, target: '_blank', rel: 'noopener' }, 'Маршрут у Google Maps')]);
 }
 const pid = p => (p.name || '') + '|' + (p.cars || []).join(',');
 async function mapView(main, todays) {
@@ -1093,8 +1169,9 @@ async function mapView(main, todays) {
   function draw() {
     if (!$('#mapbox')) return;
     E.clear(); side.replaceChildren(); over.replaceChildren(); MAP.pts = [];
+    PLACES.forEach(pl => E.poi([pl.lat, pl.lng], placeEl(pl), () => placeSheet(pl)));
     const now = Date.now(), list = MAP.pos.slice().sort((a, b) => b.t - a.t);
-    over.append(h('div', { class: 'gpill' }, list.length ? list.length + ' авто на карті' : 'Ніхто не передає позицію'), list.length ? ctrl : null);
+    over.append(h('div', { class: 'gpill' }, list.length ? list.length + ' авто на карті' : 'Ніхто не передає позицію')); if (list.length) over.append(ctrl);
     if (!list.length) side.append(h('div', { class: 'gempty' }, h('b', null, 'Зараз жоден водій не передає позицію'), 'Авто з’являться, коли водій увімкне «Передавати позицію» у своєму застосунку. Позиція також фіксується при кожному кроці: «Їду», «На місці», «Везу».'));
     list.forEach(p => {
       const code = (p.cars || [])[0] || '?';
@@ -1127,7 +1204,9 @@ async function mapView(main, todays) {
           car?.phone ? h('a', { class: 'tool', href: tel(car.phone), onclick: ev => ev.stopPropagation() }, ico('ph'), 'Подзвонити') : null,
           h('a', { class: 'tool', href: 'https://www.google.com/maps/search/?api=1&query=' + p.lat + ',' + p.lng, target: '_blank', rel: 'noopener', onclick: ev => ev.stopPropagation() }, 'У Google Maps'))));
     });
-    if (list.length && !MAP.fitted) { fitAll(); MAP.fitted = true; }
+    side.append(h('div', { class: 'gplaces' }, h('div', { class: 'gp-h' }, 'Місця'), ...PLACES.map(pl => h('button', { class: 'gp-i', type: 'button', onclick: () => { E.fit([[pl.lat, pl.lng]], 60, 16); placeSheet(pl); } },
+      h('i', { html: PLACE_SVG[pl.icon] }), h('span', null, h('b', null, pl.name), h('small', null, pl.sub))))));
+    if (!MAP.fitted) { if (list.length) fitAll(); else E.fit(PLACES.map(pl => [pl.lat, pl.lng]), 60, 15); MAP.fitted = true; }
   }
   const poll = async () => { try { const r = await api('positions'); MAP.pos = r.positions || []; draw(); } catch (e) { side.replaceChildren(h('div', { class: 'gempty' }, e.message)); } };
   clearInterval(MAP.timer); MAP.timer = setInterval(() => { if (S.view === 'map' && document.visibilityState === 'visible' && $('#mapbox')) poll(); else clearInterval(MAP.timer); }, 20000);
