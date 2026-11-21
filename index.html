@@ -8,15 +8,14 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Авто ПУ">
-<meta name="theme-color" content="#E9ECF0" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0A121D" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#FAF9F7">
 <title>Авто ПУ</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<link rel="preload" href="fonts/unbounded-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="fonts/onest-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=16">
+<link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css?v=22">
 </head>
 <body>
 <div id="app"></div>
@@ -56,6 +55,21 @@ const I = {
   share: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>',
   note: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>'
 };
+Object.assign(I, {
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-6h4v6"/></svg>',
+  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
+  fleet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16.5h16M5 16.5V12l2-4.5h10L19 12v4.5"/><path d="M5 12h14"/><circle cx="8" cy="17.5" r="1.6"/><circle cx="16" cy="17.5" r="1.6"/></svg>',
+  user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.2-3.6 4-5.5 7-5.5s5.8 1.9 7 5.5"/></svg>',
+  road: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6.5a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7H16"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 2.8 19.5h18.4Z"/><path d="M12 10v4.5M12 17.2v.1"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.1"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+  sig: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 13v8"/><circle cx="12" cy="11" r="1.8"/><path d="M8.2 7.8a5.5 5.5 0 0 0 0 6.4M15.8 7.8a5.5 5.5 0 0 1 0 6.4M5.2 5a9.5 9.5 0 0 0 0 12M18.8 5a9.5 9.5 0 0 1 0 12"/></svg>',
+  crest: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="16" cy="16" r="8.5"/><ellipse cx="16" cy="16" rx="3.6" ry="8.5"/><path d="M7.5 16h17M9 11.5h14M9 20.5h14"/><path d="M5.2 21.5C3.3 18 3.4 13.4 5.6 10M26.8 21.5c1.9-3.5 1.8-8.1-.4-11.5"/><path d="M4.6 14.5l1.8.6M4.7 18l1.8-.2M27.4 14.5l-1.8.6M27.3 18l-1.8-.2"/></svg>'
+});
 const ico = n => h('span', { html: I[n], style: 'display:inline-flex' });
 const DOW = ['неділя', 'понеділок', 'вівторок', 'середа', 'четвер', "п'ятниця", 'субота'];
 const DOW_S = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -176,7 +190,7 @@ async function api(action, payload = {}) {
 const S = {
   token: ls.get('token', null), user: ls.get('user', null), data: ls.get('data', null), loadedAt: ls.get('loadedAt', null),
   loading: false, error: '', offline: false,
-  view: ls.get('view', 'timeline'), day: null, filter: '', q: '', seen: ls.get('seen', null)
+  view: ls.get('view', 'home'), day: null, filter: '', q: '', seen: ls.get('seen', null)
 };
 
 function logout(msg) {
@@ -250,7 +264,7 @@ function renderLogin(msg) {
     err, btn);
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
   app.append(h('div', { class: 'login' },
-    h('div', { class: 'plate', 'aria-hidden': 'true' }, h('i', null, 'D'), h('b', null, '0-ПУ')),
+    h('div', { class: 'crest', 'aria-hidden': 'true', html: I.crest }),
     h('h2', null, 'Авто ПУ'),
     h('p', null, 'Поїздки водіїв Посольства на час візитів. Увійдіть логіном і PIN-кодом із вашої картки.'),
     form,
@@ -261,24 +275,48 @@ function renderLogin(msg) {
 }
 
 // ====== ГОЛОВНИЙ РЕНДЕР ======
+// Фоновий трекінг через OwnTracks: сервер готовий, у меню вмикається тут.
+const SHOW_OT = false;
+const VIEWS = [['home', 'Огляд', 'home'], ['timeline', 'Розклад', 'cal'], ['list', 'Поїздки', 'list'], ['map', 'Карта', 'pin'], ['cars', 'Автопарк', 'fleet']];
+const VIEW_TITLE = { home: 'Огляд', timeline: 'Розклад дня', list: 'Поїздки', map: 'Карта', cars: 'Автопарк' };
+function setView(k) { S.view = k; ls.set('view', k); S.filter = ''; render(); scrollTo(0, 0); }
+function initials(n) { const p = String(n || '').trim().split(/\s+/); return ((p[1] || p[0] || '?')[0] || '?').toUpperCase(); }
+// Бічна панель (лише для координатора на широкому екрані; на телефоні — вкладки під шапкою).
+function sideNav() {
+  const d = S.data, today = d?.today, list = d ? d.trips.filter(t => t.date === today) : [];
+  const live = list.filter(t => ACTIVE.includes(t.status)).length;
+  return h('aside', { class: 'side', 'aria-label': 'Навігація' },
+    h('div', { class: 'brand' }, h('span', { class: 'mark', html: I.crest }), h('div', null, h('b', null, 'Авто ПУ'), h('span', null, 'Посольство у ФРН'))),
+    h('nav', { class: 'snav' }, VIEWS.map(([k, l, ic]) => h('button', { class: S.view === k ? 'on' : '', 'aria-current': S.view === k ? 'page' : null, onclick: () => setView(k) }, h('span', { html: I[ic], style: 'display:flex' }), l,
+      k === 'map' && live ? h('span', { class: 'cnt', title: 'зараз у дорозі' }, live) : null))),
+    h('hr'),
+    h('nav', { class: 'snav' }, SHOW_OT ? h('button', { onclick: otSheet }, h('span', { html: I.sig, style: 'display:flex' }), 'Фоновий трекінг') : null,
+      h('button', { onclick: () => shareSheet((d?.trips || []).filter(t => t.date === (S.day || today)), { day: true }) }, h('span', { html: I.share, style: 'display:flex' }), 'Розклад для WhatsApp')),
+    h('div', { class: 'sp' }),
+    h('div', { class: 'me' }, h('i', null, initials(S.user?.name)), h('div', null, h('b', null, S.user?.name || ''), h('span', null, 'Координатор')),
+      h('button', { 'aria-label': 'Вийти', title: 'Вийти', html: I.out, onclick: () => { if (confirm('Вийти із застосунку?')) logout(); } })));
+}
 function render() {
   if (!S.token) return renderLogin();
   const coord = !!S.user?.admin;
+  if (coord && !VIEWS.some(v => v[0] === S.view)) S.view = 'home';
   document.body.classList.toggle('wide', coord);
   const app = $('#app'); app.replaceChildren();
   const updated = S.loadedAt ? 'оновлено о ' + new Date(S.loadedAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }) : 'завантаження…';
   const top = h('header', { class: 'top' },
     h('div', { class: 'top-row' },
       h('div', { style: 'flex:1;min-width:0' },
-        h('h1', null, coord ? 'Координація авто' : (S.user?.name || 'Мої поїздки')),
+        h('h1', null, coord ? (VIEW_TITLE[S.view] || 'Координація авто') : (S.user?.name || 'Мої поїздки')),
         h('div', { class: 'sub' }, h('span', null, coord ? S.user?.name : carsLine()), h('span', null, updated))),
-      h('button', { class: 'ib' + (S.loading ? ' spin' : ''), id: 'refresh', 'aria-label': 'Оновити', html: I.ref, onclick: () => load() }),
-      h('button', { class: 'ib', 'aria-label': 'Вийти', html: I.out, onclick: () => { if (confirm('Вийти із застосунку?')) logout(); } })),
+      h('button', { class: 'ib' + (S.loading ? ' spin' : ''), id: 'refresh', 'aria-label': 'Оновити', title: 'Оновити', html: I.ref, onclick: () => load() }),
+      h('button', { class: 'ib out', 'aria-label': 'Вийти', title: 'Вийти', html: I.out, onclick: () => { if (confirm('Вийти із застосунку?')) logout(); } })),
     coord ? coordBar() : null);
-  app.append(top);
-  if (S.error) app.append(h('div', { class: 'banner err' }, S.offline ? 'Немає з\'єднання. Показано дані, збережені ' + (S.loadedAt ? new Date(S.loadedAt).toLocaleString('uk-UA') : '') : S.error));
+  const shell = h('div', { class: 'shell' }, top);
+  if (coord) app.append(sideNav());
+  app.append(shell);
+  if (S.error) shell.append(h('div', { class: 'banner err' }, S.offline ? 'Немає з\'єднання. Показано дані, збережені ' + (S.loadedAt ? new Date(S.loadedAt).toLocaleString('uk-UA') : '') : S.error));
   const main = h('main');
-  app.append(main);
+  shell.append(main);
   if (!S.data) { main.append(h('div', { class: 'empty' }, h('b', null, 'Завантажую поїздки…'))); return; }
   if (coord) renderCoord(main); else renderDriver(main);
 }
@@ -512,8 +550,8 @@ function coordBar() {
       h('label', { class: 'd', style: 'position:relative;cursor:pointer', onclick: () => di.showPicker?.() }, dayTitle(day, d.today), di),
       day !== d.today ? h('button', { class: 'ib', onclick: () => goDay(d.today) }, 'Сьогодні') : null,
       h('button', { class: 'ib', 'aria-label': 'Наступний день', html: I.r, onclick: () => goDay(addDays(day, 1)) })),
-    h('div', { class: 'seg' }, [['timeline', 'Шкала'], ['list', 'Список'], ['map', 'Карта'], ['cars', 'Авто']].map(([k, l]) =>
-      h('button', { class: S.view === k ? 'on' : '', onclick: () => { S.view = k; ls.set('view', k); render(); } }, l))));
+    h('div', { class: 'seg', role: 'tablist' }, VIEWS.map(([k, l]) =>
+      h('button', { class: S.view === k ? 'on' : '', role: 'tab', 'aria-selected': S.view === k ? 'true' : 'false', onclick: () => setView(k) }, l))));
 }
 function goDay(day) {
   if (!day) return;
@@ -548,6 +586,7 @@ function renderCoord(main) {
   const done = list.filter(t => t.status === 'завершено').length;
   const fresh = list.filter(t => badgeOf(t)).length;
   const risk = list.filter(atRisk);
+  if (S.view === 'home') return homeView(main, list, cf, day);
   const stat = (n, l, key, warn) => h('button', { class: 'stat' + (warn && n ? ' warn' : '') + (!n ? ' zero' : '') +  (S.filter === key ? ' on' : ''), onclick: () => { S.filter = S.filter === key ? '' : key; render(); } }, h('b', { class: 'num' }, n), l);
   main.append(h('div', { class: 'stats' },
     stat(list.length, 'поїздок', ''), stat(going, 'в дорозі', 'go'), stat(done, 'завершено', 'done'),
@@ -574,6 +613,139 @@ function renderCoord(main) {
     box.replaceChildren(...(l.length ? l.map(t => tripCard(t, true, cf.has(t.uid))) : [h('div', { class: 'empty' }, h('b', null, 'Нічого не знайдено'))]));
   }
   drawList();
+  fab(main, day);
+}
+
+// ====== ОГЛЯД (головний екран координатора) ======
+function vocative(n) {
+  const w = String(n || '').trim().split(/\s+/)[1] || '';
+  if (!w) return '';
+  if (/й$/.test(w)) return w.slice(0, -1) + 'ю';
+  if (/[ая]$/.test(w)) return w.slice(0, -1) + (w.endsWith('я') ? 'є' : 'о');
+  if (/[бвгґджзклмнпрстфхцчшщ]$/i.test(w)) return w + 'е';
+  return w;
+}
+function greeting() { const hr = new Date().getHours(); return hr < 11 ? 'Доброго ранку' : hr < 18 ? 'Доброго дня' : 'Доброго вечора'; }
+function homeView(main, list, cf, day) {
+  const d = S.data, today = d.today, isToday = day === today, now = nowMin();
+  const live = list.filter(t => t.status !== 'відмінено');
+  const active = live.filter(t => ACTIVE.includes(t.status));
+  const risk = list.filter(atRisk), noCar = live.filter(t => !t.car);
+  const cars = d.cars || [];
+  const dlg = [...new Set(live.map(t => String(t.deleg || '').trim()).filter(Boolean))];
+  const done = live.filter(t => t.status === 'завершено').length;
+  const endOf = t => { const sp = span(t); return sp ? sp[1] : mins(t.tFrom); };
+  const busyNow = new Set(active.map(t => t.car));
+  const hasLeft = new Set(live.filter(t => t.status !== 'завершено' && !ACTIVE.includes(t.status) && (!isToday || (endOf(t) ?? 9999) >= now)).map(t => t.car));
+  const freeNow = cars.filter(c => !busyNow.has(c.code));
+  const dt = dObj(day);
+  const wrap = h('div', { class: 'home' });
+
+  // привітання + справжня анімація авто Посла (якщо завантажена через «МЕД»)
+  const show = cars.find(c => c.code === 'ARNd' && hasMedia(c.code, 'gif')) || cars.find(c => hasMedia(c.code, 'gif'));
+  const fig = show ? h('figure', { class: 'showcase', style: 'margin:0' }) : null;
+  if (fig) getMedia(show.code, 'gif').then(b => { const im = h('img', { alt: '' }); im.onload = () => { if (im.naturalHeight / im.naturalWidth > .8) im.classList.add('cardcrop'); }; im.src = URL.createObjectURL(b); fig.prepend(h('div', { class: 'frame' }, im)); fig.append(h('figcaption', null, [modelOf(show) || show.car, plateOf(show), show.driver].filter(Boolean).join(', '))); }).catch(() => fig.remove());
+  wrap.append(h('section', { class: 'welcome' },
+    h('div', null,
+      h('div', { class: 'eyebrow' }, 'Операційний центр'),
+      h('h2', null, greeting() + (vocative(S.user?.name) ? ', ' + vocative(S.user?.name) : '')),
+      h('p', null, 'Координація транспорту під час візитів і заходів Посольства'),
+      h('div', { class: 'when' }, h('span', { html: I.cal, style: 'display:flex' }), DOW[dt.getDay()][0].toUpperCase() + DOW[dt.getDay()].slice(1) + ', ' + dt.getDate() + ' ' + MON[dt.getMonth()] + ' ' + dt.getFullYear() + (isToday ? '' : ' (не сьогодні)'))),
+    fig));
+
+  // ключові цифри
+  const alerts = risk.length + cf.size + noCar.length;
+  const posSmall = h('small', null, h('i', { class: 'n' }), 'позиції завантажуються');
+  const kpi = (icon, n, label, small, on, cls) => h('button', { class: 'kpi' + (cls ? ' ' + cls : ''), onclick: on }, h('div', { class: 'kh' }, h('b', null, n), h('span', { html: I[icon] })), h('span', null, label), small);
+  wrap.append(h('div', { class: 'kpis' },
+    kpi('road', live.length, 'Поїздок', h('small', null, h('i', { class: done ? '' : 'n' }), done ? 'завершено ' + done : 'ще не почались'), () => setView('list')),
+    kpi('pin', active.length, 'У дорозі зараз', posSmall, () => setView('map')),
+    kpi('fleet', freeNow.length, 'Вільні авто', h('small', null, h('i', { class: freeNow.length ? '' : 'w' }), 'з ' + cars.length + ' у довіднику'), () => setView('cars')),
+    kpi('user', dlg.length, dlg.length === 1 ? 'Делегація' : 'Делегації', h('small', null, h('i', { class: 'n' }), 'у програмі дня'), () => setView('list')),
+    kpi('bell', alerts, 'Потребують уваги', h('small', null, h('i', { class: alerts ? 'r' : '' }), alerts ? 'дивіться нижче' : 'усе гаразд'), () => $('#alerts')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), alerts ? 'alert' : '')));
+  if (isToday) api('positions').then(r => { const fresh = (r.positions || []).filter(p => Date.now() - p.t < 15 * 60000).length; posSmall.replaceChildren(h('i', { class: fresh ? '' : 'n' }), fresh ? 'на карті ' + fresh : 'ніхто не передає позицію'); }).catch(() => posSmall.replaceChildren(h('i', { class: 'n' }), 'позиції недоступні'));
+  else posSmall.replaceChildren(h('i', { class: 'n' }), 'інший день');
+
+  // програма дня
+  const prog = h('div', { class: 'prog' });
+  const sorted = live.slice().sort(byTime);
+  let from = 0;
+  if (isToday) { const k = sorted.findIndex(t => ACTIVE.includes(t.status) || (endOf(t) ?? 9999) >= now - 15); from = k < 0 ? Math.max(0, sorted.length - 3) : Math.max(0, k - 1); }
+  const shown = sorted.slice(from, from + 7);
+  let nowPut = !isToday;
+  shown.forEach(t => {
+    const st = mins(t.tFrom), past = t.status === 'завершено' || (isToday && (endOf(t) ?? 9999) < now && !ACTIVE.includes(t.status));
+    if (!nowPut && st != null && st > now) { prog.append(h('div', { class: 'nowline', 'aria-hidden': 'true' }, h('b', null, hhmm(now)), h('i'), h('hr'))); nowPut = true; }
+    const car = carOf(t);
+    const title = String(t.deleg || '').trim() || String(t.people || '').trim() || t.type || 'Поїздка';
+    prog.append(h('div', { class: 'pi' + (past ? ' past' : '') + (ACTIVE.includes(t.status) ? ' live' : ''), style: '--c:' + (ST_COL[t.status] || 'var(--st-pr)'), tabindex: '0', role: 'button', onclick: () => detailSheet(t, cf.has(t.uid)), onkeydown: e => { if (e.key === 'Enter') detailSheet(t, cf.has(t.uid)); } },
+      h('div', { class: 't' }, fmtT(t.tFrom), t.tTo && mins(t.tTo) != null ? h('small', null, 'до ' + fmtT(t.tTo)) : null),
+      h('div', { class: 'rail' }, h('i')),
+      h('div', { class: 'w' }, h('b', null, title.length > 70 ? title.slice(0, 68) + '…' : title),
+        h('span', null, shortPt(t.from) + (t.to ? ' → ' + shortPt(t.to) : '') + (car ? ', ' + shortName(car.driver) : t.car ? ', ' + t.car : ', без авто'))),
+      h('span', { class: 'chip st', style: '--c:' + (cf.has(t.uid) ? 'var(--red)' : ST_COL[t.status] || 'var(--st-pr)') }, cf.has(t.uid) ? 'накладка' : t.status)));
+  });
+  if (!shown.length) prog.append(h('div', { class: 'quiet' }, h('b', null, 'На цей день поїздок немає'), 'Додайте поїздку кнопкою «Поїздка» внизу праворуч.'));
+  const rest = sorted.length - shown.length;
+
+  // поточні перевезення
+  const liveBox = h('div', { class: 'live-list' });
+  if (active.length) active.slice().sort(byTime).slice(0, 4).forEach(t => {
+    const car = carOf(t), tgt = t.status === 'з пасажирами' ? t.to : t.from;
+    liveBox.append(h('div', { class: 'lv', style: '--c:' + ST_COL[t.status], tabindex: '0', role: 'button', onclick: () => detailSheet(t, cf.has(t.uid)) },
+      h('span', { class: 'av', html: I.car }),
+      h('b', null, car ? shortName(car.driver) : (t.car || 'Без авто')),
+      h('span', null, t.status + ': ' + shortPt(tgt)),
+      h('div', { class: 'tm2' }, fmtT(t.status === 'з пасажирами' ? t.tTo : t.tFrom), h('small', null, t.status === 'з пасажирами' ? 'прибуття' : 'подача'))));
+  });
+  else {
+    const next = isToday ? sorted.find(t => (mins(t.tFrom) ?? -1) >= now && t.status !== 'завершено') : sorted[0];
+    const nc = next ? carOf(next) : null;
+    liveBox.append(h('div', { class: 'quiet' }, h('b', null, 'Зараз ніхто не в дорозі'),
+      next ? 'Наступний виїзд о ' + fmtT(next.tFrom) + ': ' + shortPt(next.from) + (nc ? ', ' + shortName(nc.driver) : '') + '.' : 'Більше виїздів на сьогодні немає.'));
+  }
+
+  wrap.append(h('div', { class: 'row2' },
+    h('section', { class: 'panel' }, h('div', { class: 'panel-h' }, h('h3', null, 'Програма дня'), h('span', { class: 'sp' }), h('button', { class: 'more', onclick: () => setView('timeline') }, rest > 0 ? 'Увесь розклад (' + sorted.length + ')' : 'Увесь розклад')), prog),
+    h('section', { class: 'panel' }, h('div', { class: 'panel-h' }, h('h3', null, 'Поточні перевезення'), h('span', { class: 'sp' }), h('button', { class: 'more', onclick: () => setView('map') }, 'Відкрити карту')), liveBox)));
+
+  // автопарк сьогодні: кільце
+  const nBusy = cars.filter(c => busyNow.has(c.code)).length, nLater = cars.filter(c => !busyNow.has(c.code) && hasLeft.has(c.code)).length, nFree = Math.max(0, cars.length - nBusy - nLater);
+  const used = cars.filter(c => live.some(t => t.car === c.code)).length, pct = cars.length ? Math.round(used / cars.length * 100) : 0;
+  const segs = [[nBusy, 'var(--acc)', 'У дорозі зараз'], [nLater, 'var(--gold)', 'Ще мають поїздки'], [nFree, '#E4DFD8', 'Вільні до кінця дня']];
+  const R0 = 52, C = 2 * Math.PI * R0; let off = 0;
+  const arcs = segs.filter(x => x[0] > 0).map(([n, col]) => { const len = C * n / Math.max(1, cars.length); const el = `<circle cx="75" cy="75" r="${R0}" fill="none" stroke="${col}" stroke-width="13" stroke-dasharray="${Math.max(0, len - 3)} ${C}" stroke-dashoffset="${-off}" transform="rotate(-90 75 75)" stroke-linecap="butt"/>`; off += len; return el; }).join('');
+  const ring = h('div', { class: 'ring' },
+    h('div', { html: `<svg viewBox="0 0 150 150" role="img" aria-label="Задіяно ${pct}% автопарку"><circle cx="75" cy="75" r="${R0}" fill="none" stroke="#F0EEEB" stroke-width="13"/>${arcs}<text x="75" y="76" text-anchor="middle" font-family="Cormorant Garamond, serif" font-weight="600" font-size="36" fill="#211F1E">${pct}%</text><text x="75" y="96" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" fill="#77736F">задіяно сьогодні</text></svg>` }),
+    h('div', { class: 'lg' }, segs.map(([n, col, l]) => h('div', null, h('i', { style: 'background:' + col }), h('span', null, l), h('b', null, n)))));
+
+  // навантаження по годинах
+  const H0 = 6, H1 = 22, cnt = Array(H1 - H0).fill(0);
+  live.forEach(t => { const m = mins(t.tFrom); if (m != null) { const k = Math.floor(m / 60) - H0; if (k >= 0 && k < cnt.length) cnt[k]++; } });
+  const mx = Math.max(1, ...cnt), nh = Math.floor(now / 60);
+  const bars = h('div', { class: 'bars', role: 'img', 'aria-label': 'Кількість подач по годинах' }, cnt.map((n, k) => {
+    const hr = H0 + k;
+    return h('div', { class: (isToday && hr === nh ? 'now' : isToday && hr < nh ? 'past' : '') },
+      h('span', { class: 'tip' }, String(hr).padStart(2, '0') + ':00, ' + n + ' ' + (n === 1 ? 'подача' : n >= 2 && n <= 4 ? 'подачі' : 'подач')),
+      h('i', { style: 'height:' + (n ? Math.max(8, n / mx * 100) : 3) + '%' }), h('em', null, k % 2 === 0 ? String(hr).padStart(2, '0') : ''));
+  }));
+
+  // сповіщення
+  const al = [];
+  risk.forEach(t => { const c = carOf(t); al.push(['r', 'warn', 'Не виїхав: ' + (c ? shortName(c.driver) : t.car), 'Подача о ' + fmtT(t.tFrom) + ', ' + shortPt(t.from), fmtT(t.tFrom), t]); });
+  const cfCars = {}; list.filter(t => cf.has(t.uid)).forEach(t => (cfCars[t.car] = cfCars[t.car] || []).push(t));
+  Object.entries(cfCars).forEach(([code, ts]) => { const c = cars.find(x => x.code === code); al.push(['r', 'warn', 'Накладка в розкладі: ' + (c ? shortName(c.driver) : code), ts.length + ' поїздки перетинаються в часі', fmtT(ts[0].tFrom), ts[0]]); });
+  noCar.forEach(t => al.push(['w', 'info', 'Без авто о ' + fmtT(t.tFrom), shortPt(t.from) + (t.to ? ' → ' + shortPt(t.to) : ''), fmtT(t.tFrom), t]));
+  list.filter(t => badgeOf(t)).forEach(t => al.push(['g', 'bell', badgeOf(t) + ': ' + fmtT(t.tFrom) + ' ' + shortPt(t.from), String(t.deleg || t.people || '').slice(0, 60), '', t]));
+  if (!al.length) al.push(['ok', 'check', 'Усе під контролем', 'Накладок, запізнень і поїздок без авто немає', '', null]);
+  const alBox = h('div', { class: 'alerts', id: 'alerts' }, al.slice(0, 5).map(([c, ic, b, sub, em, t]) => h('div', { class: 'al ' + c, tabindex: t ? '0' : null, role: t ? 'button' : null, onclick: () => t && detailSheet(t, cf.has(t.uid)) },
+    h('span', { class: 'ic', html: I[ic] }), h('b', null, b), h('span', null, sub), h('em', null, em))));
+
+  wrap.append(h('div', { class: 'row3' },
+    h('section', { class: 'panel' }, h('div', { class: 'panel-h' }, h('h3', null, 'Автопарк сьогодні'), h('span', { class: 'sp' }), h('button', { class: 'more', onclick: () => setView('cars') }, 'Усі авто')), ring),
+    h('section', { class: 'panel' }, h('div', { class: 'panel-h' }, h('h3', null, 'Навантаження по годинах'), h('span', { class: 'sp' }), h('span', { class: 'muted', style: 'font-size:12.5px' }, 'подачі авто')), bars),
+    h('section', { class: 'panel' }, h('div', { class: 'panel-h' }, h('h3', null, 'Оперативні сповіщення'), h('span', { class: 'sp' }), al.length > 5 ? h('span', { class: 'muted', style: 'font-size:12.5px' }, 'ще ' + (al.length - 5)) : null), alBox)));
+  main.append(wrap);
   fab(main, day);
 }
 
@@ -661,7 +833,7 @@ function carThumb(c) {
 }
 function carsView(main, list) {
   const d = S.data;
-  main.append(h('div', { class: 'tools', style: 'margin:0 0 10px' }, h('button', { class: 'tool', onclick: otSheet }, ico('nav'), 'Фоновий трекінг (OwnTracks)')));
+  if (SHOW_OT) main.append(h('div', { class: 'tools', style: 'margin:0 0 10px' }, h('button', { class: 'tool', onclick: otSheet }, ico('nav'), 'Фоновий трекінг (OwnTracks)')));
   const box = h('div', { class: 'carl' });
   (d.cars || []).forEach(c => {
     const l = list.filter(t => t.car === c.code && t.status !== 'відмінено').sort(byTime);
@@ -882,8 +1054,7 @@ async function mapView(main, todays) {
   const over = h('div', { class: 'gover' });
   wrap.append(side, h('div', { class: 'gmain' }, box, over));
   main.append(wrap);
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
-  box.classList.toggle('dk', dark);
+  const dark = false;
   MAP.E?.remove?.(); MAP.E = null; MAP.fitted = false; MAP.refit = false; MAP.eta = MAP.eta || {};
   try { if (MAP.gfail) throw new Error('fail'); await loadGoogle(); MAP.E = googleEngine(box, dark); }
   catch (e) {
