@@ -897,3 +897,30 @@ body.wide .rbar{left:calc(50% + 120px)}
 .fl-opt:hover{border-color:color-mix(in srgb,var(--acc) 35%,var(--line));background:#FBF7F8}
 .fl-opt > b{font:600 17px var(--serif)}
 .fl-opt span{display:flex;flex-direction:column;font-size:13.5px}.fl-opt small{color:var(--muted);font-size:12px}
+
+/* ====== Радіо: перетягування і котик-меломан ====== */
+.rbar{cursor:grab;touch-action:none;user-select:none}
+.rbar.dragging{cursor:grabbing;box-shadow:0 24px 60px rgba(0,0,0,.38);transition:none}
+.rbar.moved{right:auto!important;bottom:auto!important;transform:none!important;animation:none}
+.rbar button,.rbar input{cursor:pointer}
+.rb-cat{background:linear-gradient(160deg,#3A2E4F,#241C33)!important;display:grid;place-items:center}
+.rb-cat.dance{animation:none}
+.djcat{width:100%;height:100%;overflow:visible}
+.djcat .head{transform-origin:66px 80px;transform-box:view-box}
+.djcat .tail{transform-origin:92px 112px;transform-box:view-box}
+.djcat .body{transform-origin:66px 130px;transform-box:view-box}
+.djcat .notes text{fill:#F3C9D2;font:700 18px var(--body-f);opacity:0}
+.djcat .zz{fill:#BDB6AF;font:600 14px var(--body-f);opacity:0}
+.rb-cat:not(.dance) .zz{animation:zz 2.4s ease-in-out infinite}.rb-cat:not(.dance) .z2{animation-delay:1.2s}
+.rb-cat:not(.dance) .head{transform:rotate(-8deg) translateY(2px)}
+.rb-cat.dance .head{animation:bob .52s ease-in-out infinite alternate}
+.rb-cat.dance .body{animation:bounce .52s ease-in-out infinite alternate}
+.rb-cat.dance .tail{animation:wag .78s ease-in-out infinite alternate}
+.rb-cat.dance .notes text{animation:note 2.1s ease-out infinite}
+.rb-cat.dance .notes text:nth-child(2){animation-delay:.7s}.rb-cat.dance .notes text:nth-child(3){animation-delay:1.4s}
+@keyframes bob{from{transform:rotate(-9deg)}to{transform:rotate(9deg) translateY(1px)}}
+@keyframes bounce{from{transform:translateY(0) scaleY(1)}to{transform:translateY(-3px) scaleY(1.02)}}
+@keyframes wag{from{transform:rotate(-14deg)}to{transform:rotate(16deg)}}
+@keyframes note{0%{opacity:0;transform:translate(0,6px) scale(.8)}20%{opacity:1}100%{opacity:0;transform:translate(8px,-26px) rotate(14deg) scale(1.1)}}
+@keyframes zz{0%{opacity:0;transform:translate(0,4px)}40%{opacity:.9}100%{opacity:0;transform:translate(6px,-14px)}}
+@media (prefers-reduced-motion:reduce){.rb-cat .head,.rb-cat .body,.rb-cat .tail,.rb-cat .notes text{animation:none!important}}

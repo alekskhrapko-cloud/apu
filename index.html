@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=45">
+<link rel="stylesheet" href="style.css?v=46">
 </head>
 <body>
 <div id="app"></div>
@@ -2958,6 +2958,54 @@ function radioPlay(st) {
   RADIO.err = ''; paintRadioBar();
   try { navigator.mediaSession.metadata = new MediaMetadata({ title: RADIO.cur.name, artist: 'Авто ПУ · Радіо' }); } catch {}
 }
+// Котик-меломан у навушниках: під музику кивеє головою, махає хвостом, летять ноти; на паузі дрімає.
+const DJ_CAT = `<svg viewBox="0 0 140 140" class="djcat">
+  <g class="notes"><text x="96" y="40">♪</text><text x="108" y="58">♫</text><text x="22" y="46">♪</text></g>
+  <text class="zz" x="98" y="44">z</text><text class="zz z2" x="108" y="32">z</text>
+  <g class="body">
+    <path class="tail" d="M92 112 C122 112 128 86 112 74" fill="none" stroke="#C97B3C" stroke-width="9" stroke-linecap="round"/>
+    <ellipse cx="66" cy="108" rx="34" ry="24" fill="#E8A15A"/>
+    <path d="M48 96 q6 -6 12 0 M62 92 q6 -6 12 0 M76 96 q6 -6 12 0" stroke="#C97B3C" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <ellipse cx="66" cy="114" rx="18" ry="12" fill="#F7D3A8"/>
+    <ellipse cx="50" cy="128" rx="9" ry="6" fill="#F7D3A8"/><ellipse cx="82" cy="128" rx="9" ry="6" fill="#F7D3A8"/>
+    <g class="head">
+      <path d="M34 54 L40 22 L58 40 Z" fill="#E8A15A"/><path d="M98 54 L92 22 L74 40 Z" fill="#E8A15A"/>
+      <path d="M40 30 L44 46 L52 40 Z" fill="#F4B6B0"/><path d="M92 30 L88 46 L80 40 Z" fill="#F4B6B0"/>
+      <circle cx="66" cy="62" r="32" fill="#E8A15A"/>
+      <path d="M52 34 q4 8 0 14 M66 31 v14 M80 34 q-4 8 0 14" stroke="#C97B3C" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path class="eye" d="M48 62 q6 6 12 0" stroke="#3A2A20" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+      <path class="eye" d="M72 62 q6 6 12 0" stroke="#3A2A20" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+      <ellipse cx="66" cy="72" rx="12" ry="9" fill="#F7D3A8"/>
+      <path d="M62 70 h8 l-4 4 z" fill="#E07A8A"/>
+      <path d="M66 74 v3 M66 77 q-4 4 -8 1 M66 77 q4 4 8 1" stroke="#3A2A20" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <circle cx="46" cy="74" r="4" fill="#F4A6A0" opacity=".6"/><circle cx="86" cy="74" r="4" fill="#F4A6A0" opacity=".6"/>
+      <path d="M30 60 C30 18 102 18 102 60" fill="none" stroke="#2B2140" stroke-width="6" stroke-linecap="round"/>
+      <rect x="22" y="54" width="14" height="22" rx="6" fill="#7A1E30"/><rect x="96" y="54" width="14" height="22" rx="6" fill="#7A1E30"/>
+      <rect x="25" y="58" width="5" height="14" rx="2.5" fill="#B24A5E"/><rect x="102" y="58" width="5" height="14" rx="2.5" fill="#B24A5E"/>
+    </g>
+  </g>
+</svg>`;
+// Панель радіо можна перетягнути куди завгодно; позиція запам’ятовується. Подвійний клік — на місце.
+function radioDrag(bar) {
+  if (bar._drag) return; bar._drag = true;
+  const apply = () => { const p = ls.get('rbarPos', null); if (!p) { bar.classList.remove('moved'); bar.style.removeProperty('left'); bar.style.removeProperty('top'); return; }
+    bar.classList.add('moved'); const r = bar.getBoundingClientRect();
+    pos(p.x * innerWidth, p.y * innerHeight); };
+  const pos = (x, y) => { const r = bar.getBoundingClientRect(); bar.style.setProperty('left', Math.max(8, Math.min(innerWidth - r.width - 8, x)) + 'px', 'important'); bar.style.setProperty('top', Math.max(8, Math.min(innerHeight - r.height - 8, y)) + 'px', 'important'); };
+  let st = null;
+  bar.addEventListener('pointerdown', e => {
+    if (e.target.closest('button,input') || e.button > 0) return;
+    const r = bar.getBoundingClientRect(); st = { dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId };
+    bar.setPointerCapture(e.pointerId); bar.classList.add('dragging', 'moved'); pos(r.left, r.top);
+  });
+  bar.addEventListener('pointermove', e => { if (!st) return; const r = bar.getBoundingClientRect();
+    pos(e.clientX - st.dx, e.clientY - st.dy); });
+  const end = () => { if (!st) return; st = null; bar.classList.remove('dragging'); const r = bar.getBoundingClientRect(); ls.set('rbarPos', { x: r.left / innerWidth, y: r.top / innerHeight }); document.body.classList.remove('has-radio'); };
+  bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', end);
+  bar.addEventListener('dblclick', e => { if (e.target.closest('button,input')) return; ls.del('rbarPos'); apply(); paintRadioBar(); });
+  addEventListener('resize', apply);
+  requestAnimationFrame(apply);
+}
 function radioCat() {
   const c = RADIO.cat; if (!c) return;
   const im = catImg('rb-cat-img');
@@ -2968,13 +3016,12 @@ function radioToggle() { if (!RADIO.audio || RADIO.audio.paused) radioPlay(); el
 function paintRadioBar() {
   let bar = $('#rbar');
   const on = RADIO.audio && !RADIO.audio.paused, wait = RADIO.audio && RADIO.audio.readyState < 3 && on;
-  document.body.classList.toggle('has-radio', !!(RADIO.cur && (RADIO.audio || S.view === 'radio')));
+  document.body.classList.toggle('has-radio', !!(RADIO.cur && (RADIO.audio || S.view === 'radio')) && !ls.get('rbarPos', null));
   if (!RADIO.cur || (!RADIO.audio && S.view !== 'radio')) { bar?.remove(); return; }
-  if (!bar) { bar = h('div', { class: 'rbar', id: 'rbar' }); document.body.append(bar); }
+  if (!bar) { bar = h('div', { class: 'rbar', id: 'rbar', title: 'Перетягніть, щоб перемістити · подвійний клік — на місце' }); document.body.append(bar); radioDrag(bar); }
   bar.classList.toggle('on', !!on);
   // Котик, що «слухає» радіо: новий кожні 20 секунд, поки грає.
-  if (!RADIO.cat) { RADIO.cat = h('div', { class: 'rb-cat', title: 'Новий котик', onclick: e => { e.stopPropagation(); radioCat(); } }); radioCat(); }
-  clearInterval(RADIO.catT); if (on) RADIO.catT = setInterval(radioCat, 20000);
+  if (!RADIO.cat) RADIO.cat = h('div', { class: 'rb-cat', 'aria-hidden': 'true', html: DJ_CAT });
   RADIO.cat.classList.toggle('dance', !!on);
   bar.replaceChildren(
     RADIO.cat,
@@ -2982,7 +3029,7 @@ function paintRadioBar() {
     h('div', { class: 'rb-t' }, h('b', null, RADIO.cur.name), h('small', null, RADIO.err || (wait ? 'підключаюсь…' : on ? 'в ефірі' : 'на паузі'))),
     on ? h('span', { class: 'rb-eq', 'aria-hidden': 'true' }, h('i'), h('i'), h('i'), h('i')) : null,
     h('input', { type: 'range', min: '0', max: '1', step: '0.05', value: String(RADIO.audio?.volume ?? ls.get('radioVol', .8)), 'aria-label': 'Гучність', oninput: e => { if (RADIO.audio) RADIO.audio.volume = +e.target.value; ls.set('radioVol', +e.target.value); } }),
-    h('button', { class: 'rb-x', 'aria-label': 'Вимкнути радіо', onclick: () => { document.body.classList.remove('has-radio'); RADIO.audio?.pause(); RADIO.audio && (RADIO.audio.src = ''); RADIO.audio = null; clearInterval(RADIO.catT); RADIO.cat = null; $('#rbar')?.remove(); } }, '×'));
+    h('button', { class: 'rb-x', 'aria-label': 'Вимкнути радіо', onclick: () => { document.body.classList.remove('has-radio'); RADIO.audio?.pause(); RADIO.audio && (RADIO.audio.src = ''); RADIO.audio = null; RADIO.cat = null; $('#rbar')?.remove(); } }, '×'));
 }
 function radioView(main) {
   const grid = h('div', { class: 'rgrid' });
