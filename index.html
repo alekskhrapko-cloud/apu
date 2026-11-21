@@ -8,197 +8,15 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Авто ПУ">
-<meta name="theme-color" content="#0b3a75">
+<meta name="theme-color" content="#E9ECF0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0A121D" media="(prefers-color-scheme: dark)">
 <title>Авто ПУ</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<style>
-:root{
-  --bg:#f3f4f6;--card:#fff;--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--soft:#f9fafb;
-  --acc:#0b57b7;--acc-ink:#fff;--acc-soft:#e8f0fb;--yel:#ffd500;--red:#c62828;--red-soft:#fdecec;
-  --st-pr:#6b7280;--st-ok:#0b57b7;--st-go:#d97706;--st-at:#7c3aed;--st-pax:#0e7490;--st-done:#15803d;--st-x:#9ca3af;
-  --r:14px;--sh:0 1px 2px rgba(0,0,0,.05),0 1px 8px rgba(0,0,0,.04);
-  --safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
-}
-@media (prefers-color-scheme:dark){:root{
-  --bg:#0f1115;--card:#181b21;--ink:#f1f3f6;--muted:#9aa3af;--line:#2a2f37;--soft:#1e222a;
-  --acc:#5b9cf0;--acc-ink:#08111f;--acc-soft:#16253b;--red:#ef6b6b;--red-soft:#3a1d1f;
-  --st-pr:#9aa3af;--st-ok:#5b9cf0;--st-go:#f0a83a;--st-at:#a78bfa;--st-pax:#22d3ee;--st-done:#4ade80;--st-x:#6b7280;
-  --sh:none;
-}}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif}
-button,input,select,textarea{font:inherit;color:inherit}
-a{color:var(--acc)}
-.hidden{display:none!important}
-.num{font-variant-numeric:tabular-nums}
-
-/* top bar */
-.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.6) blur(12px);-webkit-backdrop-filter:saturate(1.6) blur(12px);padding:calc(var(--safe-t) + 10px) 16px 10px;border-bottom:1px solid var(--line)}
-.top-row{display:flex;align-items:center;gap:10px}
-.top h1{font-size:20px;margin:0;font-weight:700;letter-spacing:-.01em;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.top .sub{color:var(--muted);font-size:13px;margin-top:2px}
-.ib{border:0;background:var(--card);box-shadow:var(--sh);border-radius:12px;height:40px;min-width:40px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font-size:14px;font-weight:600}
-.ib svg{width:18px;height:18px}
-.spin svg{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
-
-main{padding:12px 12px calc(110px + var(--safe-b));max-width:760px;margin:0 auto}
-.wide main{max-width:1200px}
-.banner{margin:10px 12px 0;padding:10px 12px;border-radius:12px;font-size:14px;background:var(--acc-soft)}
-.banner.err{background:var(--red-soft);color:var(--red)}
-
-/* login */
-.login{min-height:100dvh;display:flex;flex-direction:column;justify-content:center;padding:24px;max-width:420px;margin:0 auto}
-.logo{width:72px;height:72px;border-radius:18px;background:var(--acc);display:flex;align-items:center;justify-content:center;margin-bottom:18px}
-.logo svg{width:44px;height:44px}
-.login h2{font-size:28px;margin:0 0 4px;letter-spacing:-.02em}
-.login p{color:var(--muted);margin:0 0 24px}
-.fld{display:block;margin-bottom:14px}
-.fld span{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;font-weight:600}
-.inp{width:100%;height:50px;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:0 14px;font-size:17px;outline:none}
-.inp:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft)}
-textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
-.btn{width:100%;height:52px;border:0;border-radius:14px;background:var(--acc);color:var(--acc-ink);font-weight:700;font-size:17px;cursor:pointer}
-.btn:disabled{opacity:.6}
-.btn.ghost{background:var(--card);color:var(--ink);border:1px solid var(--line)}
-.btn.danger{background:var(--red-soft);color:var(--red)}
-.err{color:var(--red);font-size:14px;min-height:20px;margin:6px 0}
-.hint{margin-top:28px;font-size:13px;color:var(--muted);background:var(--card);border-radius:12px;padding:12px 14px;box-shadow:var(--sh)}
-
-/* sections & cards */
-.sec{margin:18px 4px 8px;display:flex;align-items:baseline;gap:8px}
-.sec h3{margin:0;font-size:17px;letter-spacing:-.01em}
-.sec .c{color:var(--muted);font-size:14px}
-.card{background:var(--card);border-radius:var(--r);box-shadow:var(--sh);padding:14px;margin-bottom:10px;position:relative;border:1px solid transparent}
-.card.new{border-color:var(--yel);box-shadow:0 0 0 2px color-mix(in srgb,var(--yel) 45%,transparent)}
-.card.conf{border-color:var(--red)}
-.card.x{opacity:.55}
-.card.x .tm,.card.x .pts{text-decoration:line-through}
-.chead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.tm{font-size:22px;font-weight:750;letter-spacing:-.02em}
-.tm small{font-size:15px;font-weight:600;color:var(--muted)}
-.chip{font-size:12px;font-weight:700;border-radius:999px;padding:3px 9px;background:var(--soft);color:var(--muted);white-space:nowrap}
-.chip.st{color:#fff}
-.chip.badge{background:var(--yel);color:#3a2f00}
-.chip.cf{background:var(--red);color:#fff}
-.chip.car{background:var(--acc-soft);color:var(--acc)}
-.sp{flex:1}
-.pts{margin:10px 0 4px;display:grid;grid-template-columns:18px 1fr auto;gap:2px 10px;align-items:start}
-.dot{width:10px;height:10px;border-radius:50%;margin:6px 4px 0;border:2px solid var(--acc)}
-.dot.b{background:var(--acc)}
-.vline{width:2px;background:var(--line);margin:0 8px;min-height:10px}
-.pt{font-weight:600;word-break:break-word}
-.pt small{display:block;color:var(--muted);font-weight:500}
-.nav{border:0;background:var(--acc-soft);color:var(--acc);border-radius:10px;height:34px;padding:0 10px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:4px;text-decoration:none;white-space:nowrap}
-.meta{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin-top:10px;font-size:14px}
-.meta dt{color:var(--muted)}
-.meta dd{margin:0;word-break:break-word;white-space:pre-line}
-.acts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
-.act{flex:1;min-width:120px;height:46px;border:0;border-radius:12px;font-weight:700;font-size:15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
-.act.main{background:var(--acc);color:var(--acc-ink)}
-.act.sec2{background:var(--soft);color:var(--ink);flex:0 0 auto;min-width:46px;padding:0 14px}
-.empty{text-align:center;color:var(--muted);padding:48px 16px}
-.empty b{display:block;color:var(--ink);font-size:17px;margin-bottom:4px}
-.calls{display:flex;gap:8px;overflow-x:auto;padding:2px 4px 4px;margin:0 -4px;scrollbar-width:none}
-.calls a{flex:0 0 auto;text-decoration:none;color:var(--ink);background:var(--card);box-shadow:var(--sh);border-radius:12px;padding:8px 12px;font-size:14px;display:flex;align-items:center;gap:8px}
-.calls a svg{width:16px;height:16px;color:var(--st-done)}
-
-/* coordinator */
-.dbar{display:flex;align-items:center;gap:8px;margin-top:10px}
-.dbar .d{flex:1;text-align:center;font-weight:700}
-.dbar input[type=date]{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
-.seg{display:flex;background:var(--soft);border-radius:12px;padding:3px;margin-top:10px}
-.seg button{flex:1;border:0;background:transparent;height:34px;border-radius:9px;font-weight:600;font-size:14px;color:var(--muted);cursor:pointer}
-.seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--sh)}
-.stats{display:flex;gap:8px;overflow-x:auto;margin:12px 0 4px;scrollbar-width:none}
-.stat{flex:0 0 auto;background:var(--card);box-shadow:var(--sh);border-radius:12px;padding:8px 12px;font-size:13px;color:var(--muted);border:0;text-align:left;cursor:pointer}
-.stat b{display:block;font-size:20px;color:var(--ink)}
-.stat.warn b{color:var(--red)}
-.stat.on{outline:2px solid var(--acc)}
-.search{margin-top:10px}
-
-.tl{background:var(--card);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden;margin-top:10px}
-.tl-scroll{overflow-x:auto;position:relative}
-.tl-grid{position:relative}
-.tl-hours{display:flex;height:28px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);z-index:2}
-.tl-hours div{flex:0 0 auto;font-size:11px;color:var(--muted);padding:6px 0 0 4px;border-left:1px solid var(--line)}
-.tl-row{display:flex;border-bottom:1px solid var(--line);min-height:58px}
-.tl-lab{position:sticky;left:0;z-index:3;flex:0 0 96px;background:var(--card);border-right:1px solid var(--line);padding:8px;font-size:12px;line-height:1.25}
-.tl-lab b{display:block;font-size:13px}
-.tl-lab span{color:var(--muted)}
-.tl-lane{position:relative;flex:0 0 auto}
-.tl-blk{position:absolute;border-radius:8px;padding:4px 6px;font-size:11px;line-height:1.2;overflow:hidden;color:#fff;cursor:pointer;border:0;text-align:left}
-.tl-blk b{display:block;font-size:12px}
-.tl-blk.cf{outline:2px solid var(--red);outline-offset:1px}
-.tl-blk.x{opacity:.45;text-decoration:line-through}
-.tl-now{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:1;pointer-events:none}
-
-.fab{position:fixed;right:16px;bottom:calc(18px + var(--safe-b));z-index:30;height:56px;border-radius:18px;border:0;background:var(--acc);color:var(--acc-ink);font-weight:700;font-size:16px;padding:0 20px;box-shadow:0 8px 24px rgba(11,87,183,.35);display:flex;align-items:center;gap:8px;cursor:pointer}
-.carl .card{display:flex;gap:12px;align-items:center}
-.carl .ci{flex:1;min-width:0}
-.carl .ci b{display:block}
-.carl .ci span{color:var(--muted);font-size:14px}
-
-/* sheet */
-.ov{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;justify-content:center}
-.sheet{background:var(--bg);width:100%;max-width:640px;max-height:94dvh;border-radius:20px 20px 0 0;display:flex;flex-direction:column;animation:up .2s ease}
-@keyframes up{from{transform:translateY(30px);opacity:.6}}
-.sh-h{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line)}
-.sh-h h3{margin:0;flex:1;font-size:18px}
-.sh-b{overflow-y:auto;padding:14px 16px}
-.sh-f{padding:12px 16px calc(12px + var(--safe-b));border-top:1px solid var(--line);display:flex;gap:8px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
-.hero{background:var(--card);border-radius:18px;box-shadow:var(--sh);padding:16px;margin:4px 0 12px;border:2px solid var(--acc)}
-.hero.late{border-color:var(--red)}
-.hero-top{display:flex;justify-content:space-between;align-items:center;font-weight:700;color:var(--acc);font-size:14px;text-transform:uppercase;letter-spacing:.04em}
-.hero-tm{font-size:34px;font-weight:800;letter-spacing:-.03em;margin-top:4px}
-.hero-tm small{font-size:18px;color:var(--muted);font-weight:600}
-.hero-timing{font-weight:600;color:var(--muted)}
-.hero.late .hero-timing{color:var(--red)}
-.hero-note{font-size:14px;margin-top:6px}
-.hero-btn{margin-top:14px;height:58px;font-size:18px}
-.hero-hint{font-size:12px;color:var(--muted);text-align:center;margin-top:6px}
-.stepper{display:grid;gap:0;margin-top:12px}
-.stp{display:grid;grid-template-columns:18px 1fr;column-gap:10px;padding:4px 0;position:relative}
-.stp i{grid-row:span 2;width:14px;height:14px;border-radius:50%;border:2px solid var(--line);margin-top:3px;background:var(--card)}
-.stp b{font-size:12px;color:var(--muted);font-weight:600}
-.stp span{font-weight:600;word-break:break-word}
-.stp.done i{background:var(--st-done);border-color:var(--st-done)}
-.stp.done span{color:var(--muted)}
-.stp.cur i{border-color:var(--acc);box-shadow:0 0 0 4px var(--acc-soft)}
-.tools{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 6px}
-.tool{border:0;background:var(--card);box-shadow:var(--sh);border-radius:12px;height:38px;padding:0 12px;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;color:var(--ink);text-decoration:none;cursor:pointer}
-.quick{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.chipbtn{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
-.chk{display:inline-flex;align-items:center;gap:6px;font-size:14px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 12px}
-.leave{margin-top:12px;font-size:14px;display:grid;gap:6px}
-.eta{background:var(--acc-soft);border-radius:12px;padding:10px 12px;font-size:14px;margin:-4px 0 14px;display:grid;gap:6px}
-.eta:empty{display:none}
-.muted{color:var(--muted)}
-.chipbtn.free{border-color:var(--st-done);color:var(--st-done)}
-.chipbtn.busy{border-color:var(--line);color:var(--muted)}
-.chipbtn.sel{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
-a.btn{display:flex;align-items:center;justify-content:center;text-decoration:none}
-.btn.wa{background:#25d366;color:#fff;display:flex;align-items:center;justify-content:center;text-decoration:none}
-.sh-f{flex-wrap:wrap}
-.sh-f .btn{flex:1 1 auto;min-width:110px}
-.imgprev img{width:100%;border-radius:14px;box-shadow:var(--sh);margin-bottom:10px}
-.geobar{display:flex;align-items:center;gap:12px;background:var(--card);box-shadow:var(--sh);border-radius:14px;padding:10px 14px;margin:8px 0}
-.geobar.on{outline:2px solid var(--st-done)}
-.switch{width:52px;height:32px;border-radius:999px;border:0;background:var(--line);position:relative;cursor:pointer;flex:0 0 auto}
-.switch i{position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .15s}
-.switch.on{background:var(--st-done)}
-.switch.on i{left:23px}
-.mapbox{height:calc(100dvh - 330px);min-height:360px;border-radius:var(--r);overflow:hidden;box-shadow:var(--sh);margin-top:6px;background:var(--soft)}
-.maplist{margin-top:10px}
-.pin{display:inline-block;color:#fff;font:700 12px/1 -apple-system,sans-serif;padding:7px 8px;border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,.35);border:2px solid #fff;white-space:nowrap;transform:translate(0,0)}
-.pin.stale{opacity:.5}
-.pop{font-size:13px;display:grid;gap:4px;min-width:200px}
-.carimg{width:64px;height:64px;border-radius:12px;object-fit:cover;flex:0 0 auto}
-.toast{position:fixed;left:50%;bottom:calc(90px + var(--safe-b));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;z-index:60;max-width:90vw}
-@media (min-width:900px){.ov{align-items:center}.sheet{border-radius:20px}}
-</style>
+<link rel="preload" href="fonts/unbounded-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/onest-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app"></div>
@@ -403,8 +221,8 @@ function notifyNew(before, after) {
 }
 function badgeOf(t) {
   if (!S.seen) return null;
-  if (!(t.uid in S.seen)) return 'НОВЕ';
-  if (S.seen[t.uid] !== tripHash(t)) return 'ЗМІНЕНО';
+  if (!(t.uid in S.seen)) return 'Нове';
+  if (S.seen[t.uid] !== tripHash(t)) return 'Змінено';
   return null;
 }
 
@@ -432,9 +250,9 @@ function renderLogin(msg) {
     err, btn);
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
   app.append(h('div', { class: 'login' },
-    h('div', { class: 'logo', html: I.car.replace('currentColor', '#fff') }),
+    h('div', { class: 'plate', 'aria-hidden': 'true' }, h('i', null, 'D'), h('b', null, '0-ПУ')),
     h('h2', null, 'Авто ПУ'),
-    h('p', null, 'Поїздки та завдання для водіїв'),
+    h('p', null, 'Поїздки водіїв Посольства на час візитів. Увійдіть логіном і PIN-кодом із вашої картки.'),
     form,
     !standalone ? h('div', { class: 'hint' }, ios
       ? 'Щоб застосунок був на екрані: у Safari натисніть «Поділитися» ⬆︎ → «На початковий екран».'
@@ -453,7 +271,7 @@ function render() {
     h('div', { class: 'top-row' },
       h('div', { style: 'flex:1;min-width:0' },
         h('h1', null, coord ? 'Координація авто' : (S.user?.name || 'Мої поїздки')),
-        h('div', { class: 'sub' }, coord ? (S.user?.name + ' · ' + updated) : (carsLine() + ' · ' + updated))),
+        h('div', { class: 'sub' }, h('span', null, coord ? S.user?.name : carsLine()), h('span', null, updated))),
       h('button', { class: 'ib' + (S.loading ? ' spin' : ''), id: 'refresh', 'aria-label': 'Оновити', html: I.ref, onclick: () => load() }),
       h('button', { class: 'ib', 'aria-label': 'Вийти', html: I.out, onclick: () => { if (confirm('Вийти із застосунку?')) logout(); } })),
     coord ? coordBar() : null);
@@ -558,19 +376,21 @@ function heroCard(t, today) {
     h('div', { class: 'stp' + (stepsDone > i + 1 ? ' done' : stepsDone === i + 1 ? ' cur' : '') }, h('i'), h('b', null, lab), h('span', null, cleanPt(val) || '—'))));
   const btn = st ? h('button', { class: 'btn hero-btn', onclick: e => doStep(t, st, e.currentTarget) }, st.label) : null;
   const navNow = ACTIVE.includes(t.status) ? navHref(t.status === 'з пасажирами' ? t.to : t.from) : null;
-  return h('div', { class: 'hero' + (late ? ' late' : '') },
-    h('div', { class: 'hero-top' }, h('span', null, ACTIVE.includes(t.status) ? 'Зараз' : 'Наступна поїздка'), h('span', { class: 'chip st', style: 'background:' + (ST_COL[t.status] || 'var(--st-pr)') }, t.status)),
-    h('div', { class: 'hero-tm num' }, fmtT(t.tFrom), t.tTo ? h('small', null, ' → ' + fmtT(t.tTo)) : null),
-    timing ? h('div', { class: 'hero-timing' }, timing) : null,
-    stepper,
-    t.flight ? h('div', { class: 'hero-note' }, 'Рейс: ' + t.flight) : null,
-    t.note ? h('div', { class: 'hero-note' }, 'Коментар: ' + t.note) : null,
-    btn, st?.hint ? h('div', { class: 'hero-hint' }, st.hint) : null,
-    h('div', { class: 'acts' },
-      navNow ? h('a', { class: 'act sec2', href: navNow, target: '_blank', rel: 'noopener' }, ico('nav'), 'Навігація') : null,
-      t.contact ? h('a', { class: 'act sec2', href: tel(t.contact), }, ico('ph'), 'На місці') : null,
-      h('button', { class: 'act sec2', onclick: () => noteSheet(t) }, ico('note'), 'Коментар')),
-    ['призначено', 'прийнято'].includes(t.status) && t.from ? leaveBox(t) : null);
+  return h('section', { class: 'hero' + (late ? ' late' : ''), 'aria-label': ACTIVE.includes(t.status) ? 'Поточна поїздка' : 'Наступна поїздка' },
+    h('div', { class: 'hero-board' },
+      h('div', { class: 'hero-top' }, h('span', null, ACTIVE.includes(t.status) ? 'Зараз у роботі' : 'Наступна поїздка'), h('span', { class: 'chip st', style: '--c:' + (ST_COL[t.status] || 'var(--st-pr)') }, t.status)),
+      h('div', { class: 'hero-tm num' }, fmtT(t.tFrom), t.tTo ? h('small', null, '→ ' + fmtT(t.tTo)) : null),
+      timing ? h('div', { class: 'hero-timing' }, timing) : null),
+    h('div', { class: 'hero-body' },
+      stepper,
+      t.flight ? h('div', { class: 'hero-note' }, 'Рейс: ' + t.flight) : null,
+      t.note ? h('div', { class: 'hero-note' }, 'Коментар: ' + t.note) : null,
+      btn, st?.hint ? h('div', { class: 'hero-hint' }, st.hint) : null,
+      h('div', { class: 'acts' },
+        navNow ? h('a', { class: 'act sec2', href: navNow, target: '_blank', rel: 'noopener' }, ico('nav'), 'Навігація') : null,
+        t.contact ? h('a', { class: 'act sec2', href: tel(t.contact), }, ico('ph'), 'На місці') : null,
+        h('button', { class: 'act sec2', onclick: () => noteSheet(t) }, ico('note'), 'Коментар')),
+      ['призначено', 'прийнято'].includes(t.status) && t.from ? leaveBox(t) : null));
 }
 // «Коли виїжджати?» — від поточної позиції водія до місця подачі.
 function leaveBox(t) {
@@ -604,18 +424,18 @@ function tripCard(t, coord, conflict) {
   const badge = badgeOf(t);
   const x = t.status === 'відмінено';
   const car = (S.data.cars || []).find(c => c.code === t.car);
-  const card = h('div', { class: 'card' + (badge ? ' new' : '') + (conflict ? ' conf' : '') + (x ? ' x' : ''), onclick: () => { if (badge) { markSeen(t); card.classList.remove('new'); card.querySelector('.badge')?.remove(); } } });
+  const card = h('div', { class: 'card' + (badge ? ' new' : '') + (conflict ? ' conf' : '') + (x ? ' x' : ''), style: '--rail:' + (ST_COL[t.status] || 'var(--st-pr)'), onclick: () => { if (badge) { markSeen(t); card.classList.remove('new'); card.querySelector('.badge')?.remove(); } } });
   const sp = span(t);
   card.append(h('div', { class: 'chead' },
     h('div', { class: 'tm num' }, fmtT(t.tFrom), t.tTo && mins(t.tTo) != null ? h('small', null, ' → ' + fmtT(t.tTo)) : (sp && /-|–/.test(t.tFrom) ? h('small', null, ' → ' + hhmm(sp[1])) : null)),
     h('span', { class: 'sp' }),
     badge ? h('span', { class: 'chip badge' }, badge) : null,
-    conflict ? h('span', { class: 'chip cf' }, 'КОНФЛІКТ') : null,
-    coord && atRisk(t) ? h('span', { class: 'chip cf' }, 'НЕ ВИЇХАВ') : null,
+    conflict ? h('span', { class: 'chip cf' }, 'Конфлікт') : null,
+    coord && atRisk(t) ? h('span', { class: 'chip cf' }, 'Не виїхав') : null,
     t.type ? h('span', { class: 'chip' }, t.type) : null,
-    h('span', { class: 'chip st', style: 'background:' + (ST_COL[t.status] || 'var(--st-pr)') }, t.status)));
+    h('span', { class: 'chip st', style: '--c:' + (ST_COL[t.status] || 'var(--st-pr)') }, t.status)));
   if (coord) card.append(h('div', { style: 'margin-top:8px;display:flex;gap:6px;flex-wrap:wrap' },
-    t.car ? h('span', { class: 'chip car' }, t.car + (car ? ' · ' + car.driver : '')) : h('span', { class: 'chip cf' }, 'БЕЗ АВТО'),
+    t.car ? h('span', { class: 'chip car' }, (car ? car.driver + ', ' : '') + t.car) : h('span', { class: 'chip cf' }, 'Без авто'),
     t.deleg ? h('span', { class: 'chip' }, t.deleg) : null));
 
   const pts = h('div', { class: 'pts' });
@@ -624,8 +444,8 @@ function tripCard(t, coord, conflict) {
     pts.append(h('span', { class: 'dot ' + cls }), h('div', { class: 'pt' }, label || '—', sub ? h('small', null, sub) : null),
       href ? h('a', { class: 'nav', href, target: '_blank', rel: 'noopener', onclick: e => e.stopPropagation() }, ico('nav'), 'Навігація') : h('span'));
   };
-  row('', t.from, 'подача' + (t.tFrom ? ' · ' + fmtT(t.tFrom) : ''), t.from);
-  if (t.to) row('b', t.to, 'призначення' + (t.tTo ? ' · ' + fmtT(t.tTo) : ''), t.to);
+  row('', t.from, 'подача' + (t.tFrom ? ' о ' + fmtT(t.tFrom) : ''), t.from);
+  if (t.to) row('b', t.to, 'прибуття' + (t.tTo ? ' о ' + fmtT(t.tTo) : ''), t.to);
   card.append(pts);
 
   const meta = h('dl', { class: 'meta' });
@@ -637,7 +457,7 @@ function tripCard(t, coord, conflict) {
   const routeTxt = String(t.route || '').replace(URL_RE, '').trim();
   m('Маршрут', routeTxt);
   m('Коментар', t.note);
-  if (coord && car?.phone) m('Водій', car.driver + ' · ' + fmtPhone(car.phone));
+  if (coord && car?.phone) m('Водій', car.driver + ', ' + fmtPhone(car.phone));
   if (coord && t.updated) m('Оновлено', t.updated);
   if (meta.childNodes.length) card.append(meta);
 
@@ -728,7 +548,7 @@ function renderCoord(main) {
   const done = list.filter(t => t.status === 'завершено').length;
   const fresh = list.filter(t => badgeOf(t)).length;
   const risk = list.filter(atRisk);
-  const stat = (n, l, key, warn) => h('button', { class: 'stat' + (warn && n ? ' warn' : '') + (S.filter === key ? ' on' : ''), onclick: () => { S.filter = S.filter === key ? '' : key; render(); } }, h('b', { class: 'num' }, n), l);
+  const stat = (n, l, key, warn) => h('button', { class: 'stat' + (warn && n ? ' warn' : '') + (!n ? ' zero' : '') +  (S.filter === key ? ' on' : ''), onclick: () => { S.filter = S.filter === key ? '' : key; render(); } }, h('b', { class: 'num' }, n), l);
   main.append(h('div', { class: 'stats' },
     stat(list.length, 'поїздок', ''), stat(going, 'в дорозі', 'go'), stat(done, 'завершено', 'done'),
     stat(risk.length, 'не виїхали', 'risk', true), stat(cf.size, 'конфлікти', 'cf', true), stat(noCar.length, 'без авто', 'nocar', true), fresh ? stat(fresh, 'нові/змінені', 'new') : null));
@@ -774,8 +594,8 @@ function timeline(main, list, cf, day) {
   const noCar = list.filter(t => !t.car);
   if (noCar.length) rows.unshift(['', noCar]);
 
-  const grid = h('div', { class: 'tl-grid', style: 'width:' + (96 + W) + 'px' });
-  const hours = h('div', { class: 'tl-hours' }, h('div', { style: 'width:96px;border-left:0;position:sticky;left:0;background:var(--card);z-index:3' }));
+  const grid = h('div', { class: 'tl-grid', style: 'width:' + (104 + W) + 'px' });
+  const hours = h('div', { class: 'tl-hours' }, h('div', { style: 'width:104px;border-left:0;position:sticky;left:0;background:var(--card);z-index:3' }));
   for (let x = h0; x < h1; x++) hours.append(h('div', { style: 'width:' + 60 * PX + 'px' }, String(x % 24).padStart(2, '0') + ':00'));
   grid.append(hours);
   for (const [code, l] of rows) {
@@ -790,18 +610,18 @@ function timeline(main, list, cf, day) {
       const left = (s[0] - h0 * 60) * PX, width = Math.max((s[1] - s[0]) * PX - 3, 46);
       lane.append(h('button', {
         class: 'tl-blk' + (cf.has(t.uid) ? ' cf' : '') + (t.status === 'відмінено' ? ' x' : ''),
-        style: `left:${left}px;width:${width}px;top:${6 + k * 50}px;height:46px;background:${ST_COL[t.status] || 'var(--st-pr)'}`,
+        style: `left:${left}px;width:${width}px;top:${7 + k * 52}px;height:46px;--c:${ST_COL[t.status] || 'var(--st-pr)'}`,
         title: `${fmtT(t.tFrom)} ${t.from} → ${t.to}`,
         onclick: () => detailSheet(t, cf.has(t.uid))
       }, h('b', { class: 'num' }, fmtT(t.tFrom) + (badgeOf(t) ? ' •' : '')), shortPt(t.from) + ' → ' + shortPt(t.to)));
     });
-    lane.style.minHeight = (12 + Math.max(1, tracks.length) * 50) + 'px';
+    lane.style.minHeight = (14 + Math.max(1, tracks.length) * 52) + 'px';
     grid.append(h('div', { class: 'tl-row' },
       h('div', { class: 'tl-lab' }, code ? [h('b', null, code), h('span', null, car ? shortName(car.driver) : '—')] : h('b', { style: 'color:var(--red)' }, 'Без авто')), lane));
   }
   if (day === d.today) {
     const now = new Date(), nm = now.getHours() * 60 + now.getMinutes();
-    if (nm >= h0 * 60 && nm <= h1 * 60) grid.append(h('div', { class: 'tl-now', style: 'left:' + (96 + (nm - h0 * 60) * PX) + 'px' }));
+    if (nm >= h0 * 60 && nm <= h1 * 60) grid.append(h('div', { class: 'tl-now', style: 'left:' + (104 + (nm - h0 * 60) * PX) + 'px' }, h('span', null, hhmm(nm))));
   }
   const sc = h('div', { class: 'tl-scroll' }, grid);
   main.append(h('div', { class: 'tl' }, sc));
@@ -828,13 +648,13 @@ function carsView(main, list) {
     box.append(h('div', { class: 'card' },
       c.photo && /^https?:/.test(c.photo) ? h('img', { class: 'carimg', src: c.photo, alt: '', loading: 'lazy' }) : null,
       h('div', { class: 'ci' },
-        h('b', null, c.code + ' · ' + (c.driver || '—')),
-        h('span', null, [c.car, c.color, c.seats ? c.seats + ' місць' : ''].filter(Boolean).join(' · ')),
+        h('b', null, c.driver || '—'),
+        h('span', null, [c.car, c.color, c.seats ? c.seats + ' місць' : ''].filter(Boolean).join(', ') + ' (' + c.code + ')'),
         h('div', { style: 'margin-top:6px;font-size:14px' },
-          cur ? h('span', { class: 'chip st', style: 'background:' + ST_COL[cur.status] }, cur.status + ' · ' + fmtT(cur.tFrom) + ' ' + shortPt(cur.to)) :
+          cur ? h('span', { class: 'chip st', style: '--c:' + ST_COL[cur.status] }, cur.status + ', ' + fmtT(cur.tFrom) + ' ' + shortPt(cur.to)) :
             next ? h('span', { class: 'chip' }, 'далі: ' + fmtT(next.tFrom) + ' ' + shortPt(next.from)) : h('span', { class: 'chip' }, 'вільний'),
           ' ', h('span', { class: 'chip' }, l.length + ' поїзд.'))),
-      h('div', { style: 'display:flex;flex-direction:column;gap:6px' },
+      h('div', { class: 'tools2' },
         c.phone ? h('a', { class: 'ib', href: tel(c.phone), 'aria-label': 'Подзвонити', html: I.ph }) : null,
         l.length ? h('button', { class: 'ib', 'aria-label': 'Поділитися планом водія', html: I.share, onclick: () => shareSheet(l, { plan: c }) }) : null,
         h('button', { class: 'ib', 'aria-label': '3D-GIF авто', onclick: () => carGifSheet(c), style: 'font-size:12px;font-weight:800' }, 'GIF'),
@@ -846,7 +666,7 @@ function carsView(main, list) {
 
 function detailSheet(t, conflict) {
   markSeen(t);
-  sheet(fmtT(t.tFrom) + ' · ' + (t.car || 'без авто'), [tripCard(t, true, conflict)], []);
+  sheet('Поїздка о ' + fmtT(t.tFrom), [tripCard(t, true, conflict)], []);
 }
 
 function editSheet(t) {
@@ -995,7 +815,7 @@ async function mapView(main, todays) {
       if (p.acc && p.acc < 2000) L.circle([p.lat, p.lng], { radius: p.acc, weight: 1, opacity: .4, fillOpacity: .06 }).addTo(MAP.layer);
       pts.push([p.lat, p.lng]);
       info.append(h('div', { class: 'card', style: 'display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px', onclick: () => { MAP.map.setView([p.lat, p.lng], 14); p._mk.openPopup(); } },
-        h('span', { class: 'chip st', style: 'background:' + col }, code), h('div', { style: 'flex:1;min-width:0' }, h('b', null, p.name || code), h('div', { class: 'muted', style: 'font-size:13px' }, agoText(now - p.t) + (cur ? ' · ' + cur.status + ' ' + fmtT(cur.tFrom) + ' → ' + cleanPt(cur.status === 'з пасажирами' ? cur.to : cur.from).slice(0, 34) : ''))),
+        h('span', { class: 'chip st', style: '--c:' + col }, code), h('div', { style: 'flex:1;min-width:0' }, h('b', null, p.name || code), h('div', { class: 'muted', style: 'font-size:13px' }, agoText(now - p.t) + (cur ? ' · ' + cur.status + ' ' + fmtT(cur.tFrom) + ' → ' + cleanPt(cur.status === 'з пасажирами' ? cur.to : cur.from).slice(0, 34) : ''))),
         car?.phone ? h('a', { class: 'ib', href: tel(car.phone), html: I.ph, onclick: e => e.stopPropagation() }) : null));
     });
     if (pts.length && !MAP.fitted) { MAP.map.fitBounds(pts, { padding: [40, 40], maxZoom: 14 }); MAP.fitted = true; }
@@ -1163,7 +983,7 @@ function carGifFor(car, trip, o = {}) {
 }
 // Завантаження справжньої анімації / фото авто (координатор). Файл ділиться на частини і пишеться в прихований аркуш таблиці.
 function mediaSheet(car) {
-  const carTitle = [modelOf(car) || car.code, plateOf(car), car.driver].filter(Boolean).join(' · ');
+  const carTitle = [modelOf(car) || car.code, plateOf(car), car.driver].filter(Boolean).join(', ');
   const box = h('div');
   const status = h('div', { class: 'hero-hint', style: 'text-align:left' });
   const draw = () => {
@@ -1214,7 +1034,7 @@ function carGifSheet(car) {
   let file = null;
   const share = h('button', { class: 'btn', disabled: true, onclick: async () => { try { await navigator.share({ files: [file] }); } catch (e) { if (e.name !== 'AbortError') toast(e.message); } } }, 'Поділитися…');
   const dl = h('a', { class: 'btn ghost', href: '#', download: 'avto-' + car.code + '.gif' }, 'Завантажити');
-  sheet('3D-GIF · ' + car.code, [pv, st], [navigator.share ? share : null, dl]);
+  sheet('3D-GIF: ' + (car.driver || car.code), [pv, st], [navigator.share ? share : null, dl]);
   carGifFor(car, null, { phone: true }).then(blob => {
     file = new File([blob], 'avto-' + String(car.code).replace(/\W/g, '') + '.gif', { type: 'image/gif' });
     const u = URL.createObjectURL(blob); pv.replaceChildren(h('img', { src: u, alt: 'Авто' })); dl.href = u;
