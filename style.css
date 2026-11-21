@@ -519,3 +519,19 @@ a.btn{display:flex;align-items:center;justify-content:center;text-decoration:non
 .chip.trkc.stale{background:var(--warn-soft);color:var(--warn)}
 .chip.trkc.never{color:var(--muted)}
 .callx{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--body);padding:8px 0}
+/* Склад пасажирів і місткість */
+.ppl{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:48px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:7px 8px;cursor:text}
+.ppl:focus-within{border-color:var(--acc);box-shadow:0 0 0 3px rgba(114,47,59,.12)}
+.ppl-c{display:inline-flex;align-items:center;gap:4px;background:#F6ECEE;color:var(--acc);border-radius:999px;padding:4px 4px 4px 11px;font-size:14px;font-weight:500}
+.ppl-c button{border:0;background:transparent;color:inherit;width:22px;height:22px;border-radius:50%;cursor:pointer;font-size:16px;line-height:1}
+.ppl-c button:hover{background:rgba(114,47,59,.12)}
+.ppl-in{flex:1 1 140px;min-width:120px;border:0;outline:0;font:inherit;font-size:15px;padding:6px 4px;background:transparent}
+.ppl-sug{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ppl-sl{width:100%;font-size:12.5px;color:var(--muted)}
+.ppl-s{font-size:13px;padding:5px 10px}
+.ppl-s.dl{border-color:var(--gold)}
+.pax-h{display:block;margin-top:5px;font-size:12.5px;color:var(--muted)}
+.pax-h.over{color:var(--red);font-weight:600}
+.inp.bad{border-color:var(--red);color:var(--red);background:var(--red-soft)}
+.pax-over{color:var(--red)}
+.ct-pick{margin-top:6px;border:0;background:transparent;color:var(--acc);font:inherit;font-size:13px;padding:2px 0;cursor:pointer;text-decoration:underline}

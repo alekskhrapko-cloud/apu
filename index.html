@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=31">
+<link rel="stylesheet" href="style.css?v=32">
 </head>
 <body>
 <div id="app"></div>
@@ -539,7 +539,8 @@ function tripCard(t, coord, conflict) {
 
   const meta = h('dl', { class: 'meta' });
   const m = (k, v) => { if (v) meta.append(h('dt', null, k), h('dd', null, v)); };
-  m('Пасажири', [t.pax ? t.pax + ' ос.' : '', t.people].filter(Boolean).join(' — '));
+  { const cap = Number(car?.seats) || 0, over = cap && Number(t.pax) > cap; const txt = [t.pax ? t.pax + ' ос.' : '', t.people].filter(Boolean).join(' — ');
+    if (txt) m('Пасажири', over ? h('span', { class: 'pax-over' }, txt, h('b', null, ' · більше, ніж місць (' + cap + ')')) : txt); }
   if (t.flight) { const fh = flightHref(t.flight); m('Рейс', fh ? h('span', null, t.flight + ' · ', h('a', { href: fh, target: '_blank', rel: 'noopener', onclick: e => e.stopPropagation() }, 'статус рейсу')) : t.flight); }
   if (!coord) m('Делегація', t.deleg);
   m('Відповідальний', t.resp);
@@ -1001,6 +1002,30 @@ function detailSheet(t, conflict) {
 
 // Підбір авто на час поїздки o. Вільне — без перетину (±15 хв на під'їзд); «об'єднати» — та сама подача
 // або те саме призначення з різницею до 20 хв і вистачає місць; рекомендація — вільне з найменшим запасом місць і навантаженням.
+// ===== Склад пасажирів: прізвища з попередніх поїздок + нові =====
+function splitPeople(str) {
+  return String(str || '').split(/\n|;|,/).map(x => x.replace(/^[^:]{0,60}:\s*/, '').replace(/\s+/g, ' ').trim()).filter(x => x.length > 1 && x.length < 60 && !/^\d+$/.test(x));
+}
+// Схоже на прізвище/ім'я людини (а не на опис на кшталт «формування кортежу»).
+function looksLikeName(n) { const w = n.split(' '); return w.length <= 3 && /^[A-ZА-ЯІЇЄҐ]/.test(n) && !/[\d+()]/.test(n) && !w.some(x => /^(ПМУ|ПУ|МЗС|СКМУ|багаж|охорон|делегац|водій|кортеж)/i.test(x)); }
+function knownPeople(trips, deleg) {
+  const cnt = new Map(), byDel = new Set();
+  trips.forEach(t => splitPeople(t.people).filter(looksLikeName).forEach(n => { cnt.set(n, (cnt.get(n) || 0) + 1); if (deleg && t.deleg === deleg) byDel.add(n); }));
+  return { all: [...cnt.keys()].sort((a, b) => cnt.get(b) - cnt.get(a) || a.localeCompare(b, 'uk')), deleg: [...byDel] };
+}
+// Контакти з попередніх поїздок («Відповідальний», «Контакт на місці»): ім'я + телефон.
+function knownContacts(trips) {
+  const m = new Map();
+  trips.forEach(t => [t.resp, t.contact].forEach(v => { v = String(v || '').trim(); if (v && v.length < 80) m.set(v, (m.get(v) || 0) + 1); }));
+  return [...m.keys()].sort((a, b) => m.get(b) - m.get(a));
+}
+// Вибір з контактів телефона (Android Chrome; на iPhone Safari цієї функції поки немає).
+async function pickContact() {
+  if (!('contacts' in navigator && 'select' in navigator.contacts)) return null;
+  const [c] = await navigator.contacts.select(['name', 'tel'], { multiple: false });
+  if (!c) return null;
+  return [c.name?.[0], c.tel?.[0]].filter(Boolean).join(', ');
+}
 function seatsW(n) { n = Number(n); const m = n % 10, c = n % 100; return n + ' ' + (m === 1 && c !== 11 ? 'місце' : m >= 2 && m <= 4 && (c < 12 || c > 14) ? 'місця' : 'місць'); }
 function samePt(a, b) { a = cleanPt(a).toLowerCase(); b = cleanPt(b).toLowerCase(); return !!a && a === b; }
 function rankCars(d, o, selfUid) {
@@ -1053,7 +1078,13 @@ function editSheet(t) {
   const dlD = h('datalist', { id: 'dels' }, (d.delegations || []).map(p => h('option', { value: p })));
   f.note = h('textarea', { class: 'inp' }); f.note.value = t.note || '';
   f.route = h('textarea', { class: 'inp', style: 'min-height:60px' }); f.route.value = t.route || '';
-  f.people = h('textarea', { class: 'inp', style: 'min-height:60px' }); f.people.value = t.people || '';
+  f.people = h('input', { type: 'hidden', value: t.people || '' });
+  const ppl = { list: splitPeople(t.people), raw: t.people || '' };
+  const peopleBox = h('div', { class: 'ppl' });
+  const pplInput = h('input', { class: 'ppl-in', list: 'pplList', placeholder: ppl.list.length ? 'Додати ще…' : 'Прізвище — Enter, або оберіть нижче', enterkeyhint: 'enter' });
+  const pplDl = h('datalist', { id: 'pplList' });
+  const pplSug = h('div', { class: 'ppl-sug' });
+  let paxTouched = !!t.pax && Number(t.pax) !== ppl.list.length;
   f.car = h('select', { class: 'inp' }, [['', '— не призначено —'], ...(d.cars || []).map(c => [c.code, c.code + ' · ' + (c.driver || '') + (c.seats ? ' · ' + c.seats + ' м.' : '')])].map(([v, l]) => h('option', { value: v }, l)));
   f.car.value = t.car || '';
   f.driver = h('select', { class: 'inp' });
@@ -1069,14 +1100,51 @@ function editSheet(t) {
     inp('to', 'Точка призначення', { list: 'pts' }),
     pick,
     h('div', { class: 'grid2' }, sel('type', 'Тип', [['', '—'], ...(d.types || []).map(x => [x, x])]), inp('flight', 'Рейс', { placeholder: 'LO389, 11:25' })),
-    h('label', { class: 'fld' }, h('span', null, 'Склад (прізвища)'), f.people),
+    h('div', { class: 'fld' }, h('span', null, 'Склад (прізвища)'), peopleBox, pplDl, pplSug, f.people),
     inp('deleg', 'Делегація', { list: 'dels' }),
-    h('div', { class: 'grid2' }, inp('resp', 'Відповідальний'), inp('contact', 'Контакт на місці (ім’я, телефон)', { placeholder: 'Пан Мюллер, +49 170 1234567' })),
+    h('div', { class: 'grid2' }, inp('resp', 'Відповідальний', { list: 'ctList', placeholder: 'Ім’я, телефон' }), inp('contact', 'Контакт на місці (ім’я, телефон)', { list: 'ctList', placeholder: 'Пан Мюллер, +49 170 1234567' })),
+    h('datalist', { id: 'ctList' }, knownContacts(d.trips).slice(0, 200).map(v => h('option', { value: v }))),
     h('label', { class: 'fld' }, h('span', null, 'Коментар по маршруту / посилання на карту'), f.route),
     h('label', { class: 'fld' }, h('span', null, 'Оперативний коментар'), f.note),
     sel('status', 'Статус', (d.statuses || []).map(x => [x, x]))];
   if (t.car && !(d.cars || []).some(c => c.code === t.car)) f.car.append(h('option', { value: t.car }, t.car)), (f.car.value = t.car);
   const collect = () => { const o = { uid: t.uid }; for (const [k, el] of Object.entries(f)) o[k] = el.value.trim(); return o; };
+  // --- склад: чипи, підказки, автоматична кількість осіб ---
+  const paxHint = h('small', { class: 'pax-h' });
+  f.pax.closest('label').append(paxHint);
+  const seatsOf = () => Number((d.cars || []).find(c => c.code === f.car.value)?.seats) || 0;
+  const drawPax = () => {
+    const n = Number(f.pax.value) || 0, cap = seatsOf();
+    const over = cap && n > cap;
+    f.pax.classList.toggle('bad', !!over);
+    paxHint.className = 'pax-h' + (over ? ' over' : '');
+    paxHint.textContent = cap ? (over ? 'Більше, ніж місць в авто (' + cap + ')' : 'з ' + cap + ' місць') : (ppl.list.length ? 'за складом: ' + ppl.list.length : '');
+  };
+  const syncPeople = () => {
+    f.people.value = ppl.list.join(', ');
+    if (!paxTouched) f.pax.value = ppl.list.length ? String(ppl.list.length) : '';
+    peopleBox.replaceChildren(...ppl.list.map(n => h('span', { class: 'ppl-c' }, n, h('button', { type: 'button', 'aria-label': 'Прибрати ' + n, onclick: () => { ppl.list = ppl.list.filter(x => x !== n); syncPeople(); } }, '×'))), pplInput);
+    pplInput.placeholder = ppl.list.length ? 'Додати ще…' : 'Прізвище — Enter, або оберіть нижче';
+    const kp = knownPeople(d.trips, f.deleg.value.trim());
+    pplDl.replaceChildren(...kp.all.filter(n => !ppl.list.includes(n)).slice(0, 300).map(n => h('option', { value: n })));
+    const sug = [...kp.deleg, ...kp.all].filter((n, i, a) => a.indexOf(n) === i && !ppl.list.includes(n)).slice(0, 10);
+    pplSug.replaceChildren(...(sug.length ? [h('span', { class: 'ppl-sl' }, kp.deleg.length ? 'Із цієї делегації та раніше:' : 'Раніше їздили:')] : []),
+      ...sug.map(n => h('button', { type: 'button', class: 'chipbtn ppl-s' + (kp.deleg.includes(n) ? ' dl' : ''), onclick: () => { ppl.list.push(n); syncPeople(); } }, '+ ' + n)));
+    drawPax(); drawAvail();
+  };
+  const addTyped = () => { splitPeople(pplInput.value).forEach(n => { if (!ppl.list.includes(n)) ppl.list.push(n); }); pplInput.value = ''; syncPeople(); pplInput.focus(); };
+  pplInput.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTyped(); } else if (e.key === 'Backspace' && !pplInput.value && ppl.list.length) { ppl.list.pop(); syncPeople(); } });
+  pplInput.addEventListener('change', () => { if (pplInput.value.trim()) addTyped(); });
+  pplInput.addEventListener('blur', () => { if (pplInput.value.trim()) addTyped(); });
+  peopleBox.addEventListener('click', e => { if (e.target === peopleBox) pplInput.focus(); });
+  f.pax.addEventListener('input', () => { paxTouched = f.pax.value.trim() !== '' && Number(f.pax.value) !== ppl.list.length; drawPax(); });
+  f.car.addEventListener('change', drawPax);
+  f.deleg.addEventListener('change', syncPeople);
+  // --- контакти: з телефонної книги (де підтримується) ---
+  if ('contacts' in navigator && 'select' in navigator.contacts) ['resp', 'contact'].forEach(k => {
+    f[k].closest('label').append(h('button', { type: 'button', class: 'ct-pick', onclick: async () => { try { const v = await pickContact(); if (v) f[k].value = v; } catch (e) { toast(e.message); } } }, 'З контактів'));
+  });
+  setTimeout(syncPeople, 0);
   // Підбір авто: хто вільний на цей час, кого можна об'єднати, що рекомендувати
   let poolNote = '';
   const drawAvail = () => {
@@ -1155,8 +1223,10 @@ function editSheet(t) {
     const o = { ...collect(), ...extra };
     if (poolNote && o.car && !o.note.includes('Спільно з')) o.note = [o.note, poolNote].filter(Boolean).join('\n');
     if (!o.date || !(o.from || o.to)) return toast('Вкажіть дату і хоча б одну точку');
+    if (pplInput.value.trim()) { addTyped(); Object.assign(o, { people: f.people.value, pax: f.pax.value }); }
+    const cap = seatsOf(), over = cap && Number(o.pax) > cap;
     btn.disabled = true;
-    try { await api('save', { trip: o }); closeSheet(); toast(isNew ? 'Поїздку додано' : 'Збережено'); S.day = o.date; await load(); }
+    try { await api('save', { trip: o }); closeSheet(); toast((isNew ? 'Поїздку додано' : 'Збережено') + (over ? ' · увага: ' + o.pax + ' осіб на ' + cap + ' місць' : '')); S.day = o.date; await load(); }
     catch (x) { toast(x.message); btn.disabled = false; }
   };
   const foot = [h('button', { class: 'btn', onclick: e => save(e.currentTarget) }, isNew ? 'Додати' : 'Зберегти')];
