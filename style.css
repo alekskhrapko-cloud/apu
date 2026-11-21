@@ -726,3 +726,18 @@ html[data-vt=expand]::view-transition-old(root){animation:none}
 .stop-x:hover{background:#F6ECEE;color:var(--acc)}
 .addstop{justify-self:start}
 .stop-sum{font-size:12.5px;color:var(--muted)}
+
+/* ====== Місця на карті: дотик — показати, ще раз — інформація ====== */
+.gpoi{transition:transform .3s var(--spring),box-shadow .2s}
+.gpoi.sel{box-shadow:0 0 0 3px rgba(122,30,48,.25),0 6px 18px rgba(40,20,20,.22);transform:translateY(17px) scale(1.06);z-index:5}
+.gpoi-more{font:600 11.5px var(--body-f);color:var(--acc);margin-left:2px;padding-left:8px;border-left:1px solid var(--line)}
+.gp-row{display:flex;align-items:stretch;border-radius:10px;transition:background .15s}
+.gp-row.sel{background:#F6ECEE}
+.gp-row .gp-i{flex:1}
+.gp-more{border:0;background:transparent;width:36px;font-size:22px;line-height:1;color:var(--acc);cursor:pointer;border-radius:10px}
+.gp-more:hover{background:#F6ECEE}
+/* ====== Відпочинок водія ====== */
+.pick-rest{display:block;margin-top:3px;color:#8A5A00;font-size:12.5px}
+.pick-rest::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#E0A100;margin-right:6px;vertical-align:1px}
+.rest-note{display:flex;flex-direction:column;gap:4px;margin-top:8px;padding:10px 12px;border-radius:12px;background:#FFF6DF;border:1px solid #F1D48A;color:#6B4A00;font-size:13px}
+.rest-note > span:last-child{display:flex;flex-wrap:wrap;gap:6px;align-items:center}

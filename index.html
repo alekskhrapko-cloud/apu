@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=39">
+<link rel="stylesheet" href="style.css?v=40">
 </head>
 <body>
 <div id="app"></div>
@@ -1425,6 +1425,35 @@ function timeWheel(input, defFn) {
 }
 function seatsW(n) { n = Number(n); const m = n % 10, c = n % 100; return n + ' ' + (m === 1 && c !== 11 ? 'місце' : m >= 2 && m <= 4 && (c < 12 || c > 14) ? 'місця' : 'місць'); }
 function samePt(a, b) { a = cleanPt(a).toLowerCase(); b = cleanPt(b).toLowerCase(); return !!a && a === b; }
+// Відпочинок водія: скільки годин між його попередньою поїздкою і цією (і між цією та наступною).
+// Менше 11 год (як у німецькому законі про робочий час) — жовте попередження: краще поставити іншого.
+const REST_H = 11;
+const absMin = (date, m) => Math.round(dObj(date).getTime() / 60000) + m - 12 * 60;
+function restInfo(d, name, o, selfUid) {
+  const sp = span(o); if (!name || !o.date || !sp) return null;
+  const a0 = absMin(o.date, sp[0]), a1 = absMin(o.date, sp[1]);
+  let prev = null, next = null;
+  d.trips.forEach(x => {
+    if (x.uid === selfUid || x.status === 'відмінено' || !sameName(tripDriver(x), name)) return;
+    const s2 = span(x); if (!s2) return;
+    const b0 = absMin(x.date, s2[0]), b1 = absMin(x.date, s2[1]);
+    if (b1 <= a0 + 15 && (!prev || b1 > prev.end)) prev = { x, end: b1, clock: s2[1] % 1440 };
+    if (b0 >= a1 - 15 && (!next || b0 < next.start)) next = { x, start: b0 };
+  });
+  const out = [];
+  const lateClock = c => c >= 21 * 60 || c < 4 * 60;
+  if (prev && a0 - prev.end < REST_H * 60 && (lateClock(prev.clock) || prev.x.date !== o.date)) {
+    const hrs = Math.max(0, Math.round((a0 - prev.end) / 30) / 2);
+    out.push((prev.x.date === o.date ? 'Попередня поїздка до ' : 'Напередодні працює до ') + hhmm(prev.clock) + ' — до цієї поїздки лише ' + hrs + ' год відпочинку');
+  }
+  if (next && next.start - a1 < REST_H * 60 && next.x.date !== o.date) {
+    const hrs = Math.max(0, Math.round((next.start - a1) / 30) / 2);
+    out.push('Завтра о ' + fmtT(next.x.tFrom) + ' знову виїзд — між поїздками лише ' + hrs + ' год');
+  }
+  const day = d.trips.filter(x => x.uid !== selfUid && x.status !== 'відмінено' && x.date === o.date && sameName(tripDriver(x), name)).map(span).filter(Boolean);
+  if (day.length) { const st = Math.min(sp[0], ...day.map(s2 => s2[0])), en = Math.max(sp[1], ...day.map(s2 => s2[1])); if (en - st > 12 * 60) out.push('За день виходить ' + Math.round((en - st) / 60) + ' год на зміні'); }
+  return out.length ? out : null;
+}
 function rankCars(d, o, selfUid) {
   const sp = span(o); if (!o.date || !sp) return null;
   const pax = Math.max(1, Number(o.pax) || 1);
@@ -1449,13 +1478,16 @@ function rankCars(d, o, selfUid) {
       const busyD = own.map(n => d.trips.find(x => x.uid !== selfUid && x.date === o.date && x.status !== 'відмінено' && x.car !== c.code && sameName(tripDriver(x), n) && (() => { const s2 = span(x); return s2 && s2[0] < sp[1] + 15 && sp[0] - 15 < s2[1]; })()));
       if (own.length && busyD.every(Boolean)) { kind = 'drv'; drvBusy = busyD[0]; }
     }
-    return { c, seats, kind, with: hit.sort((a, b) => span(a)[0] - span(b)[0]), freeSeats, dayCount: day.length, leaves, drvBusy };
+    const ownD = c.drivers?.length ? c.drivers : c.driver ? [c.driver] : [];
+    const restD = ownD.map(n => restInfo(d, n, o, selfUid));
+    const tired = ownD.length && restD.every(Boolean) ? restD[0][0] : null;
+    return { c, seats, kind, with: hit.sort((a, b) => span(a)[0] - span(b)[0]), freeSeats, dayCount: day.length, leaves, drvBusy, tired };
   });
   const order = { pool: 0, free: 1, drv: 2, small: 3, busy: 4, away: 5 };
   list.sort((a, b) => order[a.kind] - order[b.kind] || (a.kind === 'free' ? (a.seats - b.seats) || (a.dayCount - b.dayCount) : 0) || (a.kind === 'pool' ? b.freeSeats - a.freeSeats : 0));
   // Краще підсадити в авто, що вже їде туди ж (мінібус із запасом місць), ніж займати ще одне.
   // Легкові на 3 місця (авто Посла тощо) автоматично не підсаджуємо — лише вручну.
-  const pool = list.find(x => x.kind === 'pool' && x.seats > 3), free = list.find(x => x.kind === 'free' && x.seats > 3) || list.find(x => x.kind === 'free');
+  const pool = list.find(x => x.kind === 'pool' && x.seats > 3), free = list.find(x => x.kind === 'free' && x.seats > 3 && !x.tired) || list.find(x => x.kind === 'free' && x.seats > 3) || list.find(x => x.kind === 'free');
   const best = pool || free || null;
   if (best) list.splice(list.indexOf(best), 1), list.unshift(best);
   return { list, best, pax };
@@ -1603,7 +1635,8 @@ function editSheet(t) {
       pick.append(h('button', { type: 'button', class: 'pick-i k-' + x.kind + (on ? ' sel' : ''), onclick: () => choose(x) },
         h('span', { class: 'pick-c' }, x.c.code, r.best === x ? h('em', null, 'рекомендую') : null),
         h('span', { class: 'pick-m' }, [x.c.car, x.c.color, x.c.driver].filter(Boolean).join(' · ')),
-        h('span', { class: 'pick-s' }, h('b', null, label), ' ', why, x.leaves ? h('span', { class: 'pick-w' }, ' · від’їжджає з Берліна ' + presDT(x.leaves)) : null)));
+        h('span', { class: 'pick-s' }, h('b', null, label), ' ', why, x.leaves ? h('span', { class: 'pick-w' }, ' · від’їжджає з Берліна ' + presDT(x.leaves)) : null),
+        x.tired && ['free', 'pool'].includes(x.kind) ? h('span', { class: 'pick-rest' }, x.tired) : null));
     });
     const chosen = r.list.find(x => x.c.code === f.car.value);
     if (chosen && ['busy', 'drv', 'away', 'small'].includes(chosen.kind)) pick.append(h('div', { class: 'busy-note' },
@@ -1624,7 +1657,7 @@ function editSheet(t) {
     const busyOf = name => !sp ? null : d.trips.find(x => x.uid !== t.uid && x.date === o.date && x.status !== 'відмінено' && sameName(tripDriver(x), name) && (() => { const s2 = span(x); return s2 && s2[0] < sp[1] + 15 && sp[0] - 15 < s2[1]; })());
     const own = car?.drivers?.length ? car.drivers : car?.driver ? [car.driver] : [];
     const all = [...own, ...(d.drivers || []).map(x => x.name).filter(n => !own.some(m => sameName(m, n)))];
-    const lab = n => { const b = busyOf(n); return n + (b ? ' · зайнятий ' + fmtT(b.tFrom) + (b.car ? ' (' + b.car + ')' : '') : ''); };
+    const lab = n => { const b = busyOf(n), ri = !b && restInfo(d, n, o, t.uid); return n + (b ? ' · зайнятий ' + fmtT(b.tFrom) + (b.car ? ' (' + b.car + ')' : '') : ri ? ' · мало відпочинку' : ''); };
     f.driver.replaceChildren(h('option', { value: '' }, car ? 'Водій авто: ' + (own.length ? shortName(own[0]) : '—') : '— спершу оберіть авто —'),
       ...(own.length ? [h('optgroup', { label: 'Водії цього авто' }, ...own.map(n => h('option', { value: n }, lab(n))))] : []),
       h('optgroup', { label: 'Інші водії' }, ...all.filter(n => !own.some(m => sameName(m, n))).map(n => h('option', { value: n }, lab(n)))));
@@ -1632,7 +1665,9 @@ function editSheet(t) {
     const cur = f.driver.value || own[0] || '';
     const b = cur ? busyOf(cur) : null;
     pick.append(h('label', { class: 'fld pick-drv' }, h('span', null, 'Водій'), f.driver,
-      b ? h('small', { class: 'pick-w' }, shortName(cur) + ' о ' + fmtT(b.tFrom) + ' вже має поїздку' + (b.car ? ' на ' + b.car : '') + '. Перевірте або оберіть іншого.') : null));
+      b ? h('small', { class: 'pick-w' }, shortName(cur) + ' о ' + fmtT(b.tFrom) + ' вже має поїздку' + (b.car ? ' на ' + b.car : '') + '. Перевірте або оберіть іншого.') : null,
+      (() => { const ri = !b && cur && restInfo(d, cur, o, t.uid); if (!ri) return null; const alt = all.filter(n => !sameName(n, cur) && !busyOf(n) && !restInfo(d, n, o, t.uid)).slice(0, 2);
+        return h('div', { class: 'rest-note' }, h('b', null, shortName(cur) + ': краще дати відпочити'), h('span', null, ri.join('. ') + '.'), alt.length ? h('span', null, 'Відпочилі: ', ...alt.map(n => h('button', { type: 'button', class: 'chipbtn', onclick: () => { f.driver.value = n; f.driver.dispatchEvent(new Event('change')); } }, shortName(n)))) : null); })()));
   };
   f.driver.addEventListener('change', () => drawAvail());
   // Час у дорозі за Google Maps
@@ -1813,15 +1848,19 @@ function leafletEngine(box, dark) {
 // Постійні точки на карті: база і урядовий термінал. Гайд «як заїхати» — кроки з фото (фото додаються в медіа як PLACE-<id>-<n>).
 const PLACES = [
   { id: 'emb', name: 'Посольство України', short: 'Посольство', sub: 'Точка базування, Albrechtstraße 26, 10117 Berlin', lat: 52.52389, lng: 13.38361, icon: 'crest' },
-  { id: 'gov', name: 'Урядовий термінал BER', short: 'Урядовий термінал', sub: 'Regierungsflughafen, Willy-Brandt-Str. 1, 12529 Schönefeld. Місце зустрічі делегацій', lat: 52.38152452516927, lng: 13.50829855376269, icon: 'plane', guide: [
-    { title: 'Огляд авто і формування кортежу', text: 'Колишня територія виставки ILA, Selchow (Schönefeld): майданчик на схід від павільйону Halle C (виділено червоним на схемі). Огляд — за часом із програми (зазвичай о 06:00). Ножі, мультитули, газові балончики тощо не брати — залишити в Посольстві.', lat: 52.3524375, lng: 13.479171875, zoom: 17, media: 'GOV1' },
-    { title: 'Паркінг: чекати тут', text: 'Майданчик-«квадрат» поруч з урядовим терміналом, де авто стоять, поки делегація в терміналі.', lat: 52.38202755852296, lng: 13.507701345193405, zoom: 18 },
-    { title: 'Висадка й посадка пасажирів', text: 'Під’їзд до урядового терміналу — висаджувати пасажирів тут, до шлагбаума. Далі без окремого дозволу не заїжджати.', lat: 52.38153926641489, lng: 13.508337424710087, zoom: 18 }
+  { id: 'gov', name: 'Урядовий термінал BER', short: 'Урядовий термінал', sub: 'Regierungsflughafen, Willy-Brandt-Str. 1, 12529 Schönefeld. Висадка й посадка делегацій', lat: 52.38152452516927, lng: 13.50829855376269, icon: 'plane', guide: [
+    { title: 'Загальний вигляд', text: 'Урядовий термінал (Regierungsflughafen) — поруч із базою Flugbereitschaft BMVg. Сюди приїжджають лише ті водії, які забирають або привозять делегацію.', media: 'GOV2' },
+    { title: 'Висадка й посадка пасажирів', text: 'Під’їзд до урядового терміналу — висаджувати й забирати пасажирів тут, до шлагбаума. Далі без окремого дозволу не заїжджати.', lat: 52.38153926641489, lng: 13.508337424710087, zoom: 18 },
+    { title: 'Де запаркуватися (за потреби)', text: 'Якщо треба чекати делегацію — майданчик-«квадрат» поруч із терміналом.', lat: 52.38202755852296, lng: 13.507701345193405, zoom: 18 }
   ] },
-  { id: 'govpark', name: 'Урядовий термінал: паркінг', short: 'Паркінг УТ', sub: 'Тут авто чекають, поки делегація в терміналі', lat: 52.38202755852296, lng: 13.507701345193405, icon: 'park', minor: true },
-  { id: 'govdrop', name: 'Урядовий термінал: висадка (до шлагбаума)', short: 'Висадка УТ', sub: 'Під’їзд до урядового терміналу, висаджувати пасажирів до шлагбаума', lat: 52.38153926641489, lng: 13.508337424710087, icon: 'drop', minor: true },
-  { id: 'ila', name: 'Огляд і формування кортежу (ILA, Selchow)', short: 'Огляд / кортеж', sub: 'Колишня територія ILA, майданчик на схід від Halle C', lat: 52.3524375, lng: 13.479171875, icon: 'shield', minor: true },
-  { id: 'ber', name: 'BER, паркінг для звичайних рейсів', short: 'BER, паркінг', sub: 'Біля Steigenberger Airport Hotel. Коли зустріч не через урядовий термінал', lat: 52.36414666616245, lng: 13.512407449469531, icon: 'park' }
+  { id: 'ila', name: 'Огляд і формування кортежу (ILA, Selchow)', short: 'Огляд / кортеж', sub: 'Колишня територія ILA, майданчик на схід від Halle C. Тут перевіряють авто й шикують кортеж', lat: 52.3524375, lng: 13.479171875, icon: 'shield', guide: [
+    { title: 'Огляд авто і формування кортежу', text: 'Майданчик на схід від павільйону Halle C (виділено червоним на схемі). Огляд — за часом із програми (зазвичай о 06:00). Ножі, мультитули, газові балончики тощо не брати — залишити в Посольстві.', lat: 52.3524375, lng: 13.479171875, zoom: 17, media: 'GOV1' }
+  ] },
+  { id: 'govpark', name: 'Урядовий термінал: паркінг', short: 'Паркінг УТ', sub: 'Де стати, якщо треба чекати делегацію', lat: 52.38202755852296, lng: 13.507701345193405, icon: 'park', minor: true },
+  { id: 'govdrop', name: 'Урядовий термінал: висадка (до шлагбаума)', short: 'Висадка УТ', sub: 'Висаджувати й забирати пасажирів до шлагбаума', lat: 52.38153926641489, lng: 13.508337424710087, icon: 'drop', minor: true },
+  { id: 'ber', name: 'BER, паркінг для звичайних рейсів', short: 'BER, паркінг', sub: 'Willy-Brandt-Platz, проїзд між Steigenberger Airport Hotel і сусідньою будівлею. Коли зустріч не через урядовий термінал', lat: 52.364082091037915, lng: 13.512449601286436, icon: 'park', guide: [
+    { title: 'Де стати', text: 'Паркуватися в смузі вздовж проїзду (виділено жовтим) — не далі. Звідси пішки до виходу прильоту.', media: 'BERP1', lat: 52.364082091037915, lng: 13.512449601286436, zoom: 19 }
+  ] }
 ];
 const PLACE_SVG = {
   crest: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z" fill="currentColor"/></svg>',
@@ -1830,7 +1869,7 @@ const PLACE_SVG = {
   drop: '<svg viewBox="0 0 24 24"><path d="M12 2a6 6 0 0 1 6 6c0 4.5-6 12-6 12S6 12.5 6 8a6 6 0 0 1 6-6zm0 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM5 21h14v1.5H5z" fill="currentColor"/></svg>',
   shield: '<svg viewBox="0 0 24 24"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3zm-1.2 13.6L17 9.4l-1.4-1.4-4.8 4.8-2.4-2.4L7 11.8l3.8 3.8z" fill="currentColor"/></svg>'
 };
-function placeEl(pl) { return h('div', { class: 'gpoi poi-' + pl.id + (pl.minor ? ' minor' : ''), html: '<i>' + PLACE_SVG[pl.icon] + '</i><span>' + esc(pl.short) + '</span>' }); }
+function placeEl(pl, sel) { return h('div', { class: 'gpoi poi-' + pl.id + (pl.minor ? ' minor' : '') + (sel ? ' sel' : ''), title: sel ? 'Натисніть ще раз — інформація' : 'Показати на карті', html: '<i>' + PLACE_SVG[pl.icon] + '</i><span>' + esc(pl.short) + '</span>' + (sel ? '<b class="gpoi-more">Детальніше ›</b>' : '') }); }
 function placeSheet(pl) {
   const nav = 'https://www.google.com/maps/dir/?api=1&destination=' + pl.lat + ',' + pl.lng + '&travelmode=driving';
   const body = [h('div', { class: 'muted', style: 'margin-bottom:12px' }, pl.sub)];
@@ -1915,7 +1954,10 @@ async function mapView(main, todays) {
   function draw() {
     if (!$('#mapbox')) return;
     E.clear(); side.replaceChildren(); over.replaceChildren(); MAP.pts = [];
-    PLACES.forEach(pl => E.poi([pl.lat, pl.lng], placeEl(pl), () => placeSheet(pl)));
+    // Перший дотик — карта переходить до точки; другий (або «Детальніше ›») — інформація й гайд.
+    const focusPlace = pl => { if (MAP.poiSel === pl.id) return placeSheet(pl); MAP.poiSel = pl.id; MAP.sel = null; draw(); E.fit([[pl.lat, pl.lng]], 60, pl.minor ? 18 : 17); };
+    MAP.focusPlace = focusPlace;
+    PLACES.forEach(pl => E.poi([pl.lat, pl.lng], placeEl(pl, MAP.poiSel === pl.id), () => focusPlace(pl)));
     const now = Date.now(), list = MAP.pos.slice().sort((a, b) => b.t - a.t);
     over.append(h('div', { class: 'gpill' }, list.length ? list.length + ' авто на карті' : 'Ніхто не передає позицію')); if (list.length) over.append(ctrl);
     if (!list.length) side.append(h('div', { class: 'gempty' }, h('b', null, 'Зараз жоден водій не передає позицію'), 'Авто з’являться, коли водій увімкне «Передавати позицію» у своєму застосунку. Позиція також фіксується при кожному кроці: «Їду», «На місці», «Везу».'));
@@ -1952,8 +1994,10 @@ async function mapView(main, todays) {
           car?.phone ? h('a', { class: 'tool', href: tel(car.phone), onclick: ev => ev.stopPropagation() }, ico('ph'), 'Подзвонити') : null,
           h('a', { class: 'tool', href: 'https://www.google.com/maps/search/?api=1&query=' + p.lat + ',' + p.lng, target: '_blank', rel: 'noopener', onclick: ev => ev.stopPropagation() }, 'У Google Maps'))));
     });
-    side.append(h('div', { class: 'gplaces' }, h('div', { class: 'gp-h' }, 'Місця'), ...PLACES.map(pl => h('button', { class: 'gp-i', type: 'button', onclick: () => { E.fit([[pl.lat, pl.lng]], 60, 16); placeSheet(pl); } },
-      h('i', { html: PLACE_SVG[pl.icon] }), h('span', null, h('b', null, pl.name), h('small', null, pl.sub))))));
+    side.append(h('div', { class: 'gplaces' }, h('div', { class: 'gp-h' }, 'Місця'), ...PLACES.map(pl => h('div', { class: 'gp-row' + (MAP.poiSel === pl.id ? ' sel' : '') },
+      h('button', { class: 'gp-i', type: 'button', onclick: () => { MAP.poiSel = pl.id; MAP.sel = null; draw(); E.fit([[pl.lat, pl.lng]], 60, pl.minor ? 18 : 17); } },
+        h('i', { html: PLACE_SVG[pl.icon] }), h('span', null, h('b', null, pl.name), h('small', null, pl.sub))),
+      h('button', { class: 'gp-more', type: 'button', 'aria-label': 'Інформація: ' + pl.name, title: 'Інформація і гайд', onclick: () => placeSheet(pl) }, '›')))));
     if (!MAP.fitted) { if (list.length) fitAll(); else E.fit(PLACES.map(pl => [pl.lat, pl.lng]), 60, 15); MAP.fitted = true; }
   }
   const poll = async () => { try { const r = await api('positions'); MAP.pos = r.positions || []; draw(); } catch (e) { side.replaceChildren(h('div', { class: 'gempty' }, e.message)); } };
