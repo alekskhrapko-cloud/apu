@@ -15,7 +15,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=25">
+<link rel="stylesheet" href="style.css?v=26">
 </head>
 <body>
 <div id="app"></div>
@@ -210,7 +210,7 @@ async function load(range, quiet) {
     const d = await api('data', range || (S.user?.admin && S.data ? { from: S.data.from, to: S.data.to } : {}));
     if (!range) notifyNew(S.data, d);
     // Фонове оновлення без змін у даних не перебудовує екран (не перезапускає анімації, не смикає прокрутку).
-    const sig = JSON.stringify({ ...d, now: 0 });
+    const sig = JSON.stringify({ ...d, now: 0, track: Array.isArray(d.track) ? d.track.map(x => [x.name, Math.floor((x.t || 0) / 6e5)]) : d.track && Math.floor((d.track.t || 0) / 6e5) });
     same = quiet && sig === S.sig && !S.error;
     S.sig = sig;
     S.data = d; S.user = d.user; S.loadedAt = Date.now(); S.error = ''; S.offline = false;
@@ -283,7 +283,7 @@ function renderLogin(msg) {
 
 // ====== ГОЛОВНИЙ РЕНДЕР ======
 // Фоновий трекінг через OwnTracks: сервер готовий, у меню вмикається тут.
-const SHOW_OT = false;
+const SHOW_OT = true;
 const VIEWS = [['home', 'Огляд', 'home'], ['timeline', 'Розклад', 'cal'], ['list', 'Поїздки', 'list'], ['map', 'Карта', 'pin'], ['cars', 'Автопарк', 'fleet']];
 const VIEW_TITLE = { home: 'Огляд', timeline: 'Розклад дня', list: 'Поїздки', map: 'Карта', cars: 'Автопарк' };
 function setView(k) { S.view = k; ls.set('view', k); S.filter = ''; render(); scrollTo(0, 0); }
@@ -362,6 +362,46 @@ function geoPing(why) { // разова позиція при кроці вод�
   navigator.geolocation.getCurrentPosition(p => api('pos', { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, spd: p.coords.speed || 0, why }).catch(() => {}), () => {}, { maximumAge: 30000, timeout: 15000 });
 }
 function distM(a, b, c, d) { const R = 6371e3, t = Math.PI / 180, x = (d - b) * t * Math.cos((a + c) / 2 * t), y = (c - a) * t; return Math.hypot(x, y) * R; }
+// ===== Перевірка фонового трекінгу =====
+const TRACK_OK = 15; // хв: позиція свіжа
+function agoMin(t) { return t ? Math.round((Date.now() - t) / 60000) : null; }
+function agoWords(m) { return m == null ? 'ще не надходила' : m < 1 ? 'щойно' : m < 60 ? m + ' хв тому' : m < 1440 ? Math.floor(m / 60) + ' год ' + (m % 60) + ' хв тому' : 'понад добу тому'; }
+// Водій: картка «Фонова позиція» — чи працює OwnTracks, і кнопка з покроковою інструкцією.
+function trackCard() {
+  const p = S.data.track, m = agoMin(p?.t), ok = m != null && m <= TRACK_OK && p.src === 'ot';
+  const st = !p ? 'never' : ok ? 'ok' : 'stale';
+  const title = { ok: 'Фонова позиція передається', stale: 'Фонова позиція не оновлюється', never: 'Фонова позиція не налаштована' }[st];
+  const sub = st === 'ok' ? 'Остання ' + agoWords(m) + (p.batt != null ? ', батарея ' + p.batt + '%' : '') + '. Координатор бачить авто на карті.'
+    : st === 'stale' ? 'Остання позиція ' + agoWords(m) + (p.src === 'ot' ? ' (OwnTracks)' : ' (із застосунку)') + '. Відкрийте OwnTracks і перевірте дозвіл «Завжди» та режим «Move».'
+    : 'Налаштуйте OwnTracks один раз (2 хвилини), щоб координатор бачив авто, навіть коли телефон заблокований.';
+  return h('div', { class: 'trk ' + st },
+    h('span', { class: 'trk-dot' }),
+    h('div', { style: 'flex:1;min-width:0' }, h('b', null, title), h('div', { class: 'muted', style: 'font-size:13px;margin-top:2px' }, sub)),
+    h('button', { class: 'chipbtn', type: 'button', onclick: otSelfOpen }, st === 'ok' ? 'Інструкція' : 'Налаштувати'));
+}
+async function otSelfOpen() {
+  const w = window.open('about:blank', '_blank');
+  try {
+    const r = await api('otSelf', {});
+    const url = otLink({ name: r.name, login: r.login, ot: r.ot, cars: r.cars || [] });
+    if (w) w.location = url; else location.href = url;
+  } catch (e) { w?.close(); toast(e.message); }
+}
+// Координатор: хто з водіїв із поїздками найближчим часом не передає позицію.
+function trackIssues(list, day) {
+  if (day !== S.data.today) return [];
+  const now = nowMin(), out = [];
+  (S.data.track || []).forEach(dr => {
+    const soon = list.filter(t => t.status !== 'відмінено' && t.status !== 'завершено' && (t.driver ? sameName(t.driver, dr.name) : dr.cars.includes(t.car)))
+      .filter(t => ACTIVE.includes(t.status) || (() => { const sp = span(t); return sp && sp[0] - now <= 120 && sp[1] >= now; })());
+    if (!soon.length) return;
+    const m = agoMin(dr.t);
+    if (m != null && m <= TRACK_OK) return;
+    out.push({ dr, m, t: soon.sort(byTime)[0] });
+  });
+  return out;
+}
+
 function geoBar() {
   const on = geoOn();
   return h('div', { class: 'geobar' + (on ? ' on' : '') },
@@ -378,8 +418,11 @@ function geoBar() {
 function renderDriver(main) {
   const d = S.data, today = d.today;
   const coords = d.coordinators || [];
-  if (coords.length) main.append(h('div', { class: 'calls' }, coords.map(c => h('a', { href: tel(c.phone) }, ico('ph'), h('span', null, 'Координатор: ' + c.name)))));
-  main.append(geoBar());
+  if (coords.length) main.append(h('div', { class: 'calls' }, coords.map(c => c.phone ? h('a', { href: tel(c.phone) }, ico('ph'), h('span', null, 'Координатор: ' + shortName(c.name))) : h('span', { class: 'callx' }, 'Координатор: ' + shortName(c.name)))));
+  main.append(trackCard());
+  // Коли OwnTracks працює, перемикач «позиція із застосунку» не потрібен — не плутаємо водія двома статусами.
+  const otOk = (() => { const m = agoMin(S.data.track?.t); return m != null && m <= TRACK_OK && S.data.track.src === 'ot'; })();
+  if (!otOk || geoOn()) main.append(geoBar());
   const hero = heroTrip(d.trips, today);
   if (hero) main.append(heroCard(hero, today));
   const left = d.trips.filter(t => t.date === today && !['завершено', 'відмінено'].includes(t.status)).sort(byTime);
@@ -433,7 +476,7 @@ function heroCard(t, today) {
       btn, st?.hint ? h('div', { class: 'hero-hint' }, st.hint) : null,
       h('div', { class: 'acts' },
         navNow ? h('a', { class: 'act sec2', href: navNow, target: '_blank', rel: 'noopener' }, ico('nav'), 'Навігація') : null,
-        t.contact ? h('a', { class: 'act sec2', href: tel(t.contact), }, ico('ph'), 'На місці') : null,
+        t.contact ? h('a', { class: 'act sec2', href: tel(t.contact.match(/\+?[\d\s()-]{6,}/)?.[0] || t.contact), }, ico('ph'), 'На місці') : null,
         h('button', { class: 'act sec2', onclick: () => noteSheet(t) }, ico('note'), 'Коментар')),
       ['призначено', 'прийнято'].includes(t.status) && t.from ? leaveBox(t) : null));
 }
@@ -499,6 +542,7 @@ function tripCard(t, coord, conflict) {
   if (t.flight) { const fh = flightHref(t.flight); m('Рейс', fh ? h('span', null, t.flight + ' · ', h('a', { href: fh, target: '_blank', rel: 'noopener', onclick: e => e.stopPropagation() }, 'статус рейсу')) : t.flight); }
   if (!coord) m('Делегація', t.deleg);
   m('Відповідальний', t.resp);
+  if (t.contact) m('На місці', /\d{5,}/.test(t.contact) ? h('a', { href: tel(t.contact.match(/\+?[\d\s()-]{6,}/)?.[0] || t.contact), onclick: e => e.stopPropagation() }, t.contact) : t.contact);
   const routeTxt = String(t.route || '').replace(URL_RE, '').trim();
   m('Маршрут', routeTxt);
   m('Коментар', t.note);
@@ -510,7 +554,7 @@ function tripCard(t, coord, conflict) {
   if (!x) {
     const st = !coord ? nextStep(t) : null;
     if (st) acts.append(h('button', { class: 'act main', onclick: e => { e.stopPropagation(); doStep(t, st, e.currentTarget); } }, st.label));
-    if (t.contact) acts.append(h('a', { class: 'act sec2', href: tel(t.contact), onclick: e => e.stopPropagation() }, ico('ph'), 'На місці'));
+    if (t.contact) acts.append(h('a', { class: 'act sec2', href: tel(t.contact.match(/\+?[\d\s()-]{6,}/)?.[0] || t.contact), onclick: e => e.stopPropagation() }, ico('ph'), 'На місці'));
     if (coord && car?.phone) acts.append(h('a', { class: 'act sec2', href: tel(car.phone), onclick: e => e.stopPropagation() }, ico('ph'), 'Водій'));
     const routeUrl = URL_RE.exec(t.route || '');
     if (routeUrl) acts.append(h('a', { class: 'act sec2', href: routeUrl[0], target: '_blank', rel: 'noopener', onclick: e => e.stopPropagation() }, 'Карта'));
@@ -743,6 +787,7 @@ function homeView(main, list, cf, day) {
   risk.forEach(t => { const c = carOf(t); al.push(['r', 'warn', 'Не виїхав: ' + (c ? shortName(c.driver) : t.car), 'Подача о ' + fmtT(t.tFrom) + ', ' + shortPt(t.from), fmtT(t.tFrom), t]); });
   const cfCars = {}; list.filter(t => cf.has(t.uid)).forEach(t => (cfCars[t.car] = cfCars[t.car] || []).push(t));
   Object.entries(cfCars).forEach(([code, ts]) => { const c = cars.find(x => x.code === code); al.push(['r', 'warn', 'Накладка в розкладі: ' + (c ? shortName(c.driver) : code), ts.length + ' поїздки перетинаються в часі', fmtT(ts[0].tFrom), ts[0]]); });
+  trackIssues(list, day).forEach(x => al.push(['r', 'sig', 'Не передає позицію: ' + shortName(x.dr.name), (x.m == null ? 'Трекінг не налаштовано' : 'Остання позиція ' + agoWords(x.m)) + '. Подача о ' + fmtT(x.t.tFrom), fmtT(x.t.tFrom), x.t]));
   noCar.forEach(t => al.push(['w', 'info', 'Без авто о ' + fmtT(t.tFrom), shortPt(t.from) + (t.to ? ' → ' + shortPt(t.to) : ''), fmtT(t.tFrom), t]));
   list.filter(t => badgeOf(t)).forEach(t => al.push(['g', 'bell', badgeOf(t) + ': ' + fmtT(t.tFrom) + ' ' + shortPt(t.from), String(t.deleg || t.people || '').slice(0, 60), '', t]));
   if (!al.length) al.push(['ok', 'check', 'Усе під контролем', 'Накладок, запізнень і поїздок без авто немає', '', null]);
@@ -913,6 +958,12 @@ function presSheet(car, item) {
   drawList();
 }
 
+function trackChip(c) {
+  const ds = (S.data.track || []).filter(dr => dr.cars.includes(c.code)); if (!ds.length) return null;
+  const best = ds.reduce((a, b) => (b.t || 0) > (a.t || 0) ? b : a), m = agoMin(best.t);
+  const ok = m != null && m <= TRACK_OK;
+  return h('span', { class: 'chip trkc ' + (ok ? 'ok' : m == null ? 'never' : 'stale'), title: ds.map(x => x.name + ': ' + agoWords(agoMin(x.t))).join('\n') }, ok ? 'трекінг ✓' : m == null ? 'трекінг не налаштовано' : 'трекінг ' + agoWords(m));
+}
 function carsView(main, list) {
   const d = S.data;
   if (SHOW_OT) main.append(h('div', { class: 'tools', style: 'margin:0 0 10px' }, h('button', { class: 'tool', onclick: otSheet }, ico('nav'), 'Фоновий трекінг (OwnTracks)')));
@@ -931,7 +982,7 @@ function carsView(main, list) {
         h('div', { style: 'margin-top:6px;font-size:14px' },
           cur ? h('span', { class: 'chip st', style: '--c:' + ST_COL[cur.status] }, cur.status + ', ' + fmtT(cur.tFrom) + ' ' + shortPt(cur.to)) :
             next ? h('span', { class: 'chip' }, 'далі: ' + fmtT(next.tFrom) + ' ' + shortPt(next.from)) : h('span', { class: 'chip' }, 'вільний'),
-          ' ', h('span', { class: 'chip' }, l.length + ' поїзд.'), ' ', presChip(c.code, nowIso))),
+          ' ', h('span', { class: 'chip' }, l.length + ' поїзд.'), ' ', presChip(c.code, nowIso), ' ', trackChip(c))),
       h('div', { class: 'tools2' },
         c.phone ? h('a', { class: 'ib', href: tel(c.phone), 'aria-label': 'Подзвонити', html: I.ph }) : h('span'),
         l.length ? h('button', { class: 'ib', 'aria-label': 'Поділитися планом водія', html: I.share, onclick: () => shareSheet(l, { plan: c }) }) : h('span'),
@@ -1019,7 +1070,7 @@ function editSheet(t) {
     h('div', { class: 'grid2' }, sel('type', 'Тип', [['', '—'], ...(d.types || []).map(x => [x, x])]), inp('flight', 'Рейс', { placeholder: 'LO389, 11:25' })),
     h('label', { class: 'fld' }, h('span', null, 'Склад (прізвища)'), f.people),
     inp('deleg', 'Делегація', { list: 'dels' }),
-    h('div', { class: 'grid2' }, inp('resp', 'Відповідальний'), inp('contact', 'Контакт на місці (тел.)', { type: 'tel' })),
+    h('div', { class: 'grid2' }, inp('resp', 'Відповідальний'), inp('contact', 'Контакт на місці (ім’я, телефон)', { placeholder: 'Пан Мюллер, +49 170 1234567' })),
     h('label', { class: 'fld' }, h('span', null, 'Коментар по маршруту / посилання на карту'), f.route),
     h('label', { class: 'fld' }, h('span', null, 'Оперативний коментар'), f.note),
     sel('status', 'Статус', (d.statuses || []).map(x => [x, x]))];

@@ -509,3 +509,13 @@ a.btn{display:flex;align-items:center;justify-content:center;text-decoration:non
 @media (max-width:640px){.pt-row{grid-template-columns:70px 1fr}.pt-s{grid-column:1/-1;justify-self:start;margin-top:-2px}.pt-hd .pt-s{display:none}.pp-h{flex-direction:column}}
 .pick-drv{margin:4px 0 0}
 .pick-drv small{display:block;margin-top:6px;font-size:13px}
+/* Фоновий трекінг */
+.trk{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--card);margin-bottom:10px}
+.trk-dot{flex:0 0 10px;height:10px;border-radius:50%;background:var(--muted)}
+.trk.ok .trk-dot{background:var(--ok);box-shadow:0 0 0 4px var(--ok-soft)}
+.trk.stale{border-color:#E8C9A0;background:var(--warn-soft)}.trk.stale .trk-dot{background:var(--warn)}
+.trk.never{border-style:dashed}
+.chip.trkc.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.trkc.stale{background:var(--warn-soft);color:var(--warn)}
+.chip.trkc.never{color:var(--muted)}
+.callx{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--body);padding:8px 0}
