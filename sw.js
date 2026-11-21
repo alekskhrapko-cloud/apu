@@ -1,5 +1,5 @@
 // Авто ПУ — кеш оболонки застосунку. Дані з сервера не кешуються тут (вони в localStorage на пристрої).
-const C = 'apu-v17';
+const C = 'apu-v18';
 const SHELL = ['./', 'index.html', 'style.css?v=16', 'fonts/onest-cyrillic-wght-normal.woff2', 'fonts/onest-latin-wght-normal.woff2', 'fonts/unbounded-cyrillic-wght-normal.woff2', 'fonts/unbounded-latin-wght-normal.woff2', 'car3d.js?v=9', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(C).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
